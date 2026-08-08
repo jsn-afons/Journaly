@@ -1,0 +1,10 @@
+{
+  "name": "journal-app-workspace",
+  "private": true,
+  "scripts": {
+    "test:python": "python3 -m unittest discover -s ai_daemon/tests -t .",
+    "test": "npm run test:python",
+    "dev": "npm --prefix frontend run dev",
+    "tauri": "npm --prefix frontend run tauri"
+  }
+}

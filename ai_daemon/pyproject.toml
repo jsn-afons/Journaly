@@ -1,0 +1,13 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "journaly-ai-daemon"
+version = "0.1.0"
+description = "Local JSON-RPC AI and retrieval process for Journaly"
+requires-python = ">=3.12,<3.13"
+dependencies = ["pydantic>=2.9,<3"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["ai_daemon"]
