@@ -4,12 +4,23 @@ import asyncio, json, logging, sys
 from typing import Any
 from pydantic import ValidationError
 from ai_daemon.core.models import HealthResult, RpcError, RpcRequest
+from ai_daemon.core.config import DaemonConfig
+from ai_daemon.core.database import JournalDatabase
+from ai_daemon.indexer.pipeline import JournalIndexer
 
 logging.basicConfig(level=logging.INFO, stream=sys.stderr, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 logger = logging.getLogger(__name__)
 
+config = DaemonConfig()
+indexer = JournalIndexer(config.journal_directory, JournalDatabase(config.database_path))
+
 async def dispatch(request: RpcRequest) -> dict[str, Any]:
     if request.method == "health": return HealthResult().model_dump()
+    if request.method == "index_file": return indexer.index_file(str(request.params["path"]))
+    if request.method == "remove_file": return indexer.remove_file(str(request.params["path"]))
+    if request.method == "rebuild_index": return indexer.rebuild()
+    if request.method == "search_keyword": return {"results": indexer.search_keyword(str(request.params["query"]))}
+    if request.method == "get_index_status": return {"status": "ready", "database": str(config.database_path)}
     raise ValueError(f"unknown method: {request.method}")
 
 async def handle_line(line: str) -> dict[str, Any]:

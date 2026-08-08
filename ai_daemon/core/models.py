@@ -5,6 +5,7 @@ class RpcRequest(BaseModel):
     jsonrpc: Literal["2.0"]
     id: int | str
     method: str
+    params: dict[str, object] = {}
 
 class HealthResult(BaseModel):
     status: Literal["ok"] = "ok"

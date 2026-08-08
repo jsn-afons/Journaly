@@ -7,7 +7,7 @@ use crate::errors::AppError;
 pub struct HealthResponse { pub status: String, pub service: String }
 
 #[derive(Serialize)]
-struct RpcRequest<'a> { jsonrpc: &'static str, id: u64, method: &'a str }
+struct RpcRequest<'a> { jsonrpc: &'static str, id: u64, method: &'a str, params: serde_json::Value }
 #[derive(Deserialize)]
 struct RpcError { code: String, message: String }
 #[derive(Deserialize)]
@@ -30,16 +30,21 @@ impl SidecarClient {
         Ok(())
     }
     pub async fn health(&self) -> Result<HealthResponse, AppError> {
+        self.call("health", serde_json::json!({})).await
+    }
+    pub async fn index_file(&self, path: &str) -> Result<serde_json::Value, AppError> { self.call("index_file", serde_json::json!({"path": path})).await }
+    pub async fn remove_file(&self, path: &str) -> Result<serde_json::Value, AppError> { self.call("remove_file", serde_json::json!({"path": path})).await }
+    async fn call<T: serde::de::DeserializeOwned>(&self, method: &str, params: serde_json::Value) -> Result<T, AppError> {
         let mut locked = self.process.lock().await;
         self.ensure_process(&mut locked).await?;
         let io = locked.as_mut().expect("sidecar initialized");
-        let request = RpcRequest { jsonrpc: "2.0", id: io.next_id, method: "health" };
+        let request = RpcRequest { jsonrpc: "2.0", id: io.next_id, method, params };
         io.next_id += 1;
         let encoded = serde_json::to_string(&request).map_err(|e| AppError::InvalidResponse(e.to_string()))? + "\n";
         io.stdin.write_all(encoded.as_bytes()).await.map_err(|e| AppError::SidecarUnavailable(e.to_string()))?;
         io.stdin.flush().await.map_err(|e| AppError::SidecarUnavailable(e.to_string()))?;
         let line = timeout(Duration::from_secs(5), io.stdout.next_line()).await.map_err(|_| AppError::SidecarUnavailable("health timed out".into()))?.map_err(|e| AppError::SidecarUnavailable(e.to_string()))?.ok_or_else(|| AppError::SidecarUnavailable("sidecar closed stdout".into()))?;
-        let response: RpcResponse<HealthResponse> = serde_json::from_str(&line).map_err(|e| AppError::InvalidResponse(e.to_string()))?;
+        let response: RpcResponse<T> = serde_json::from_str(&line).map_err(|e| AppError::InvalidResponse(e.to_string()))?;
         if let Some(error) = response.error { return Err(AppError::Rpc { code: error.code, message: error.message }); }
         response.result.ok_or_else(|| AppError::InvalidResponse("missing result".into()))
     }
