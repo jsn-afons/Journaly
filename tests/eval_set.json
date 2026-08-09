@@ -1,0 +1,17 @@
+[
+  {
+    "query": "restaurant",
+    "expected_entry_titles": ["Restaurant Idea", "Restaurant Reconsidered", "Restaurant Decision"],
+    "expected_topics": ["restaurant", "business"]
+  },
+  {
+    "query": "Northeastern",
+    "expected_entry_titles": ["Restaurant Idea"],
+    "expected_topics": ["restaurant", "business"]
+  },
+  {
+    "query": "running",
+    "expected_entry_titles": ["Running"],
+    "expected_topics": ["health", "exercise"]
+  }
+]

@@ -7,7 +7,7 @@ name = "journaly-ai-daemon"
 version = "0.1.0"
 description = "Local JSON-RPC AI and retrieval process for Journaly"
 requires-python = ">=3.12,<3.13"
-dependencies = ["pydantic>=2.9,<3"]
+dependencies = ["httpx>=0.27,<1", "pydantic>=2.9,<3", "sqlite-vec==0.1.9"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["ai_daemon"]
