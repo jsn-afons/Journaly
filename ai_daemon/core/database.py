@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS chunks (
   FOREIGN KEY(entry_id) REFERENCES journal_entries(id) ON DELETE CASCADE,
   UNIQUE(entry_id, chunk_index)
 );
-CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(chunk_id UNINDEXED, entry_id UNINDEXED, heading, content);
+CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(chunk_id UNINDEXED, entry_id UNINDEXED, heading, content, tokenize='porter unicode61');
 CREATE INDEX IF NOT EXISTS idx_chunks_entry_id ON chunks(entry_id);
 CREATE INDEX IF NOT EXISTS idx_entries_created_at ON journal_entries(created_at);
 CREATE TABLE IF NOT EXISTS index_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);

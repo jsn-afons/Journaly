@@ -24,4 +24,5 @@ Not yet implemented: `get_entry` as a Python RPC method — citation resolution 
 - macOS Keychain integration for API keys (currently `JOURNALY_OPENAI_API_KEY` env var only).
 - Startup SQLite integrity check + corrupt-database rename-and-rebuild (AGENT.md sec.33).
 - A conflict-resolution UI for the external-edit-vs-unsaved-changes case; the Rust layer already detects it (`save_entry`'s `expected_content` parameter) but nothing surfaces it to the user yet.
-- Final confirmation that the full test suite (`ai_daemon/tests` + `tests/`, including the new `tests/rag/test_eval.py`) passes end-to-end after the last round of edits — see `docs/rag.md`'s "What's left" section for the specific pending item.
+
+The full test suite (`ai_daemon/tests` + `tests/`, including `tests/rag/test_eval.py`) passes on both the extension-capable runtime and the fallback runtime — see `docs/rag.md`.

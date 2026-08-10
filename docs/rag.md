@@ -34,6 +34,8 @@ If the configured embedding model or its dimension changes, `JournalDatabase._en
 
 FTS5 query note: FTS5's *query parser* (not its tokenizer) treats punctuation like `?`, `-`, `:`, `*` as operators, so a natural-language question like `"restaurants?"` was a syntax error, not just a non-match. `sanitize_fts_query` extracts word tokens and quotes each one individually before building the MATCH expression, which fixed this but changes semantics from substring/phrase matching to implicit AND-of-terms — acceptable for a keyword path that sits alongside semantic search for recall, but worth knowing if `search_keyword` results look stricter than expected for long queries (AGENT.md sec.16 asks us to verify FTS5 behavior rather than assume it).
 
+FTS5 tokenizer note: `docs_fts` is created with `tokenize='porter unicode61'`. The default `unicode61` tokenizer does no stemming, so a query for `restaurant` would not match journal text containing only `restaurants` — the RAG eval harness (below) caught this directly (recall was 0.78, below the 0.8 threshold, entirely because of a singular/plural mismatch). Porter stemming is built into SQLite core (not an extension), works identically on the extension-capable and fallback runtimes, and fixed the eval failure outright. Because `docs_fts` is created `IF NOT EXISTS`, this only applies going forward — an existing on-disk `journal_index.db` created before this change keeps its old tokenizer until `rebuild_index` recreates the database from scratch (nothing production has shipped yet, so no migration path was built for this).
+
 ## Streaming (deliberate deviation, not yet implemented)
 
 AGENT.md sec.30/36 call for streaming chat responses. This backend pass implements `chat` as a single non-streaming JSON-RPC response, because there's no frontend consumer yet to stream *to* — line-delimited JSON-RPC over stdio could support streaming via partial-result notifications, but building that without a UI to verify it against risked getting the framing wrong. This should be revisited when `Chat.tsx` is built (see "What's left" below).
@@ -42,13 +44,11 @@ AGENT.md sec.30/36 call for streaming chat responses. This backend pass implemen
 
 `tests/eval_set.json` + `tests/rag/test_eval.py` compute Recall@K (`K=5`, threshold `0.8`) against a small fixture journal at `tests/fixtures/Journal/` that reproduces the "belief changes over time" restaurant example from AGENT.md sec.26 (Jan: wants to start one, Mar: reconsiders, Jun: decides against it) plus an unrelated control entry. `expected_chunk_ids` from the spec's example schema is replaced with `expected_entry_titles`, because chunk ids are UUIDs minted at index time — a static JSON fixture can't pin them without also seeding UUID generation, which would obscure what the eval is actually checking.
 
-**Status: written but not confirmed passing.** The harness was authored and hit one `TypeError: Cannot create a consistent method resolution order` bug (a test stub incorrectly inherited both `EmbeddingProvider` and `LLMProvider`, which already inherits `EmbeddingProvider`) — that fix was applied but the test run to confirm it passes was not completed before this session's documentation checkpoint. Run `ai_daemon/.runtime/arm64/bin/python -m pytest tests -q` from the repo root to verify.
+**Status: passing.** `ai_daemon/.runtime/arm64/bin/python -m pytest ai_daemon/tests tests -q` → 28 passed; `ai_daemon/.venv312/bin/python3 -m pytest ai_daemon/tests tests -q` → 26 passed, 2 skipped (the 2 skips are vector-path tests correctly gated to the extension-capable runtime). Getting there required the `tokenize='porter unicode61'` fix described above — the eval harness is what caught the missing-stemming bug in the first place.
 
 ## What's left before Phase 4 (backend) is fully done
 
-- Confirm `tests/rag/test_eval.py` actually passes after the MRO fix (see above).
-- Re-run the full suite (`ai_daemon/tests` + `tests`) on both `ai_daemon/.runtime/arm64` (extension-capable) and `ai_daemon/.venv312` (fallback path) one more time as a final regression check — it was green on both before the eval harness was added, but not re-verified after.
-- `docs/architecture.md`/`docs/database.md`/`README.md` needed the same treatment as this file; see their own "what's left" notes.
+Nothing — the backend RAG pipeline (embeddings, hybrid search, temporal reranking, context assembly/prompt-injection defense, citations, chat, structured errors, eval harness) is implemented and the full test suite passes on both runtimes. What's left is everything explicitly out of scope for this pass, listed below.
 
 ## Explicitly out of scope for this pass (next pass, per the approved plan)
 
