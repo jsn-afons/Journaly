@@ -17,11 +17,23 @@ pub enum AppError {
     #[error("AI sidecar returned an invalid response: {0}")]
     InvalidResponse(String),
     #[error("AI sidecar error {code}: {message}")]
-    Rpc { code: String, message: String },
+    Rpc { code: String, message: String, retryable: bool },
 }
 
 impl AppError { pub fn journal(error: std::io::Error) -> Self { Self::Journal(error.to_string()) } }
 
+/// Errors reach the frontend as `{code, message, retryable}` so the UI never has to parse human-readable strings (AGENT.md sec.39).
+#[derive(serde::Serialize)]
+struct WireError { code: String, message: String, retryable: bool }
+
 impl serde::Serialize for AppError {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer { serializer.serialize_str(&self.to_string()) }
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
+        let wire = match self {
+            AppError::Rpc { code, message, retryable } => WireError { code: code.clone(), message: message.clone(), retryable: *retryable },
+            AppError::Conflict => WireError { code: "CONFLICT".into(), message: self.to_string(), retryable: false },
+            AppError::SidecarUnavailable(_) => WireError { code: "SIDECAR_UNAVAILABLE".into(), message: self.to_string(), retryable: true },
+            other => WireError { code: "JOURNAL_ERROR".into(), message: other.to_string(), retryable: false },
+        };
+        wire.serialize(serializer)
+    }
 }

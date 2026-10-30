@@ -4,7 +4,8 @@ import os
 from pydantic import BaseModel, Field
 
 class DaemonConfig(BaseModel):
-    journal_directory: Path = Field(default_factory=lambda: Path.cwd() / "Journal")
+    # Rust owns the journal location and exports it as JOURNALY_JOURNAL_DIR when spawning the daemon, so both layers always agree.
+    journal_directory: Path = Field(default_factory=lambda: Path(os.environ.get("JOURNALY_JOURNAL_DIR") or Path.cwd() / "Journal"))
     database_path: Path = Field(default_factory=lambda: Path.cwd() / "journal_index.db")
     rpc_timeout_seconds: float = Field(default=30, gt=0, le=300)
     embedding_model: str = "text-embedding-3-small"

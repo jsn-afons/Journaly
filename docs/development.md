@@ -16,3 +16,7 @@ Two test locations exist:
 - `tests/` (repo root) — the RAG evaluation harness (`tests/eval_set.json`, `tests/fixtures/Journal/`, `tests/rag/test_eval.py`), run with `python -m pytest tests -q`.
 
 Run both from the repo root (not from inside `ai_daemon/`) so `ai_daemon` resolves as an importable package. Some tests are guarded with `unittest.skipUnless(vector_extension_available(), ...)` (see `ai_daemon/tests/support.py`) and only run on an extension-capable interpreter like `ai_daemon/.runtime/arm64/bin/python`; they're silently skipped, not failed, on a stock Python.
+
+## Journal location
+
+Set `JOURNALY_JOURNAL_DIR` when launching the app to use a different journal folder (default: `Journal/` at the repo root). Rust reads it and passes it to the Python daemon, so both always use the same directory.

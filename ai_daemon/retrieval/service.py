@@ -58,7 +58,7 @@ class RetrievalService:
         latencies: dict[str, float] = {}
         with self.database.connection() as connection:
             started = time.monotonic()
-            fts_results = fts_search(connection, query, self.limit)
+            fts_results = fts_search(connection, query, self.limit, match_any=True)
             latencies["fts_seconds"] = time.monotonic() - started
 
             vector_results: list[dict[str, object]] = []

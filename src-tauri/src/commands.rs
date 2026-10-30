@@ -11,3 +11,10 @@ pub async fn health_check(state: State<'_, AppState>) -> Result<HealthResponse, 
 #[tauri::command] pub fn rename_entry(path: String, title: String, state: State<'_, AppState>) -> Result<JournalEntry, AppError> { state.journal.rename_entry(&path, &title) }
 #[tauri::command] pub fn delete_entry(path: String, state: State<'_, AppState>) -> Result<(), AppError> { state.journal.delete_entry(&path) }
 #[tauri::command] pub fn search_journal(query: String, state: State<'_, AppState>) -> Result<Vec<EntrySummary>, AppError> { state.journal.search_files(&query) }
+
+// AI/RAG passthroughs. Each forwards a single validated RPC to the Python daemon; React never talks to the daemon directly.
+#[tauri::command] pub async fn ai_search_keyword(query: String, state: State<'_, AppState>) -> Result<serde_json::Value, AppError> { state.sidecar.request("search_keyword", serde_json::json!({"query": query})).await }
+#[tauri::command] pub async fn ai_search_hybrid(query: String, state: State<'_, AppState>) -> Result<serde_json::Value, AppError> { state.sidecar.request("search_hybrid", serde_json::json!({"query": query})).await }
+#[tauri::command] pub async fn ai_chat(query: String, state: State<'_, AppState>) -> Result<serde_json::Value, AppError> { state.sidecar.request("chat", serde_json::json!({"query": query})).await }
+#[tauri::command] pub async fn ai_retry_embeddings(state: State<'_, AppState>) -> Result<serde_json::Value, AppError> { state.sidecar.request("retry_embeddings", serde_json::json!({})).await }
+#[tauri::command] pub async fn ai_index_status(state: State<'_, AppState>) -> Result<serde_json::Value, AppError> { state.sidecar.request("get_index_status", serde_json::json!({})).await }

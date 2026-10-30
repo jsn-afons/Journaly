@@ -10,7 +10,7 @@ import sqlite3
 _WORD_PATTERN = re.compile(r"\w+", re.UNICODE)
 
 
-def sanitize_fts_query(query: str) -> str | None:
+def sanitize_fts_query(query: str, match_any: bool = False) -> str | None:
     """FTS5's query parser (not its tokenizer) treats punctuation like ?, -, :, "*" as
     operators, so a natural-language question like "restaurants?" is a syntax error, not
     just an unmatched term. Quoting each extracted word token neutralizes that, at the cost
@@ -20,11 +20,14 @@ def sanitize_fts_query(query: str) -> str | None:
     """
     tokens = _WORD_PATTERN.findall(query)
     if not tokens: return None
-    return " ".join(f'"{token}"' for token in tokens)
+    # match_any (OR) is for natural-language questions in hybrid/chat: with AND, filler words like
+    # "what have I thought about" must all appear and the keyword path returns nothing. BM25 still
+    # ranks rarer terms higher, so OR stays meaningful. Plain keyword search keeps AND.
+    return (" OR " if match_any else " ").join(f'"{token}"' for token in tokens)
 
 
-def fts_search(connection: sqlite3.Connection, query: str, limit: int = 25) -> list[dict[str, object]]:
-    sanitized = sanitize_fts_query(query)
+def fts_search(connection: sqlite3.Connection, query: str, limit: int = 25, match_any: bool = False) -> list[dict[str, object]]:
+    sanitized = sanitize_fts_query(query, match_any)
     if sanitized is None: return []
     rows = connection.execute(
         "SELECT f.chunk_id, f.entry_id, e.filepath, e.created_at, f.heading, "

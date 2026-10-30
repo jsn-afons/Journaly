@@ -18,7 +18,7 @@ Not yet implemented: `get_entry` as a Python RPC method — citation resolution 
 
 ## What's left
 
-- Frontend: no `Sidebar.tsx`/`Search.tsx`/`Chat.tsx`/`Citation.tsx`/`Inspector.tsx` yet — journal browsing/search/editing currently live inline in `App.tsx`, and there is no UI for AI search mode, chat, citations, or the retrieval diagnostics the backend already returns.
+- Frontend: `Sidebar`, `Search`, `Chat`, `Citation`, `Inspector` now exist (Phase 5, see `docs/progress.md`) but have not yet been run in the live app. React reaches the daemon only via the Rust `ai_*` Tauri commands, which forward a single RPC each (AI calls time out at 90s; health at 5s). Rust errors reach React as `{code, message, retryable}`.
 - Streaming chat responses (AGENT.md sec.30/36) — `chat` is currently a single non-streaming JSON-RPC response; see `docs/rag.md`.
 - An Anthropic (or other) provider implementing the same `LLMProvider`/`EmbeddingProvider` ABCs, to prove the abstraction is actually swappable in practice, not just in theory.
 - macOS Keychain integration for API keys (currently `JOURNALY_OPENAI_API_KEY` env var only).

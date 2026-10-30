@@ -49,6 +49,13 @@ class ChatTests(unittest.TestCase):
         self.assertIn("restaurant", result["answer"])
         self.assertIn("final_results", result["diagnostics"])
 
+    def test_chat_finds_context_for_natural_language_question(self):
+        # Regression: AND-ing filler words ("what have I thought about") used to return no context.
+        provider = StubLLMProvider("ok")
+        service = RetrievalService(self.database, provider, provider)
+        result = asyncio.run(service.chat("What have I thought about restaurants?"))
+        self.assertTrue(result["diagnostics"]["final_results"])
+
     def test_chat_reports_structured_error_when_llm_unavailable(self):
         provider = StubLLMProvider(answer=None)
         service = RetrievalService(self.database, provider, provider)
@@ -61,5 +68,5 @@ class ChatTests(unittest.TestCase):
         provider = StubLLMProvider("should never be called")
         service = RetrievalService(self.database, provider, provider)
         with self.assertRaises(RetrievalUnavailable) as context:
-            asyncio.run(service.chat("a query matching nothing at all zzzznotfound"))
+            asyncio.run(service.chat("zzzznotfound qqqqmissing"))
         self.assertEqual(context.exception.code, "NO_CONTEXT_AVAILABLE")
