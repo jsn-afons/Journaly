@@ -2,6 +2,13 @@
 
 Newest first. Updated as work happens, so this always says where the project is.
 
+## Installable app, new system prompt, app icon (2026-10-31)
+
+- **System prompt**: replaced with the user's psychologically informed companion prompt (`ai_daemon/retrieval/system_prompt.md`, loaded at startup). Added: app rules first (data-not-instructions, `[entry:<uuid>]` citations, timeline, conversation memory); a three-sentence target (top, style section, closing directive; safety overrides it); section 9 rewritten because the model has no tools (retrieval happens before it is called); a "Quietly Building Confidence" section (self-efficacy/mastery evidence from the journal, attribution, autonomy support, small wins, specific acknowledgment; never flattery). A test guards the parts the app depends on. ~7k tokens per request.
+- **Journaly.app** (`scripts/build_app.sh`, see docs/packaging.md): the Python AI service is frozen with PyInstaller into `Contents/Resources/journaly-ai` (own Python + libraries, 29 MB; verified running with no Python on PATH and no Homebrew links via `otool -L`); release builds use `~/Documents/Journaly/{Journal,Chats}` and `~/Library/Application Support/com.journaly.app` for the index; `tauri dev` unchanged. Ad hoc signed. The existing journal was copied (not moved) to `~/Documents/Journaly/Journal`.
+- **Icon**: all sizes regenerated from `journaly.icns` (`tauri icon`), `icon.icns` is the original file.
+- Found while testing: the app's AI service waits for the Keychain prompt (reading the API key) before starting, so an unanswered prompt looks like "AI not running".
+
 ## Chat memory (2026-10-31)
 
 Follow-up questions now work: the AI sees the earlier messages of the conversation, including chats reopened from History.

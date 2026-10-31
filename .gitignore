@@ -17,3 +17,5 @@ journaly.config.json
 Journal/
 # Saved AI chats: private, like the journal
 Chats/
+# Packaging output
+build/

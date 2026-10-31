@@ -20,15 +20,20 @@ struct RpcResponse<T> { result: Option<T>, error: Option<RpcError> }
 struct ProcessIo { _child: Child, stdin: ChildStdin, stdout: tokio::io::Lines<BufReader<tokio::process::ChildStdout>>, next_id: u64 }
 
 #[derive(Clone)]
-pub struct SidecarClient { process: Arc<Mutex<Option<ProcessIo>>>, daemon_dir: PathBuf, journal_root: PathBuf }
+/// `daemon_dir` is the daemon's working directory (its index database and config default to it). `bundled` is the
+/// self-contained AI service shipped inside the installed .app; without it, `python -m ai_daemon...` runs from source.
+pub struct SidecarClient { process: Arc<Mutex<Option<ProcessIo>>>, daemon_dir: PathBuf, journal_root: PathBuf, bundled: Option<PathBuf> }
 
 impl SidecarClient {
-    pub fn new(daemon_dir: PathBuf, journal_root: PathBuf) -> Self { Self { process: Arc::new(Mutex::new(None)), daemon_dir, journal_root } }
+    pub fn new(daemon_dir: PathBuf, journal_root: PathBuf) -> Self { Self { process: Arc::new(Mutex::new(None)), daemon_dir, journal_root, bundled: None } }
+    pub fn bundled(executable: PathBuf, work_dir: PathBuf, journal_root: PathBuf) -> Self { Self { bundled: Some(executable), ..Self::new(work_dir, journal_root) } }
     async fn ensure_process(&self, process: &mut Option<ProcessIo>) -> Result<(), AppError> {
         if process.is_some() { return Ok(()); }
-        let executable = std::env::var("JOURNALY_PYTHON").unwrap_or_else(|_| "python3".into());
-        let mut command = Command::new(executable);
-        command.arg("-m").arg("ai_daemon.api.rpc_server").current_dir(&self.daemon_dir).env("JOURNALY_JOURNAL_DIR", &self.journal_root).stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::inherit()).kill_on_drop(true);
+        let mut command = match &self.bundled {
+            Some(executable) => Command::new(executable),
+            None => { let mut c = Command::new(std::env::var("JOURNALY_PYTHON").unwrap_or_else(|_| "python3".into())); c.arg("-m").arg("ai_daemon.api.rpc_server"); c }
+        };
+        command.current_dir(&self.daemon_dir).env("JOURNALY_JOURNAL_DIR", &self.journal_root).stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::inherit()).kill_on_drop(true);
         // Once the user has saved provider settings in the UI, those win over any inherited JOURNALY_* variables.
         if settings::exists() {
             for variable in ["JOURNALY_CHAT_BASE_URL", "JOURNALY_CHAT_MODEL", "JOURNALY_EMBEDDING_BASE_URL", "JOURNALY_EMBEDDING_MODEL", "JOURNALY_EMBEDDING_DIMENSIONS", "JOURNALY_SEND_EMBEDDING_DIMENSIONS"] { command.env_remove(variable); }

@@ -19,4 +19,6 @@ Run both from the repo root (not from inside `ai_daemon/`) so `ai_daemon` resolv
 
 ## Journal location
 
-Set `JOURNALY_JOURNAL_DIR` when launching the app to use a different journal folder (default: `Journal/` at the repo root). Rust reads it and passes it to the Python daemon, so both always use the same directory.
+Set `JOURNALY_JOURNAL_DIR` when launching the app to use a different journal folder. Defaults: `Journal/` at the repo root under `tauri dev`, `~/Documents/Journaly/Journal` in the installed app (`main.rs::Locations`). Rust reads it and passes it to the Python daemon, so both always use the same directory. Chats follow the same pattern (`JOURNALY_CHATS_DIR`, `Chats/`).
+
+To build the installable app, see [packaging.md](packaging.md).

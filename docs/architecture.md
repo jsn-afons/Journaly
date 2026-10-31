@@ -1,6 +1,8 @@
 # Architecture
 
-Journaly is a local-first macOS application. Markdown files in `Journal/` are the canonical data store; all SQLite and AI-derived data is rebuildable from them. The frontend communicates only through typed Tauri commands. Rust owns filesystem and OS integration; its sidecar client communicates with Python via line-delimited JSON-RPC on stdio. Python owns indexing and retrieval.
+For the end-to-end picture and the reasoning behind the design, start with [system-design.md](system-design.md). This page is the module-level reference.
+
+Journaly is a local-first macOS application. Markdown files in the journal folder (`~/Documents/Journaly/Journal` in the installed app, `Journal/` in development) are the canonical data store; all SQLite and AI-derived data is rebuildable from them. The frontend communicates only through typed Tauri commands. Rust owns filesystem and OS integration; its sidecar client communicates with Python via line-delimited JSON-RPC on stdio. Python owns indexing and retrieval.
 
 ## Implemented flow
 
@@ -30,9 +32,4 @@ Not yet implemented: `get_entry` as a Python RPC method — citation resolution 
 
 ## What's left
 
-- Frontend: `Sidebar`, `Search`, `Chat`, `Citation`, `Inspector` now exist (Phase 5, see `docs/progress.md`) but have not yet been run in the live app. React reaches the daemon only via the Rust `ai_*` Tauri commands, which forward a single RPC each (AI calls time out at 90s; health at 5s). Rust errors reach React as `{code, message, retryable}`.
-- An Anthropic (or other) provider implementing the same `LLMProvider`/`EmbeddingProvider` ABCs, to prove the abstraction is actually swappable in practice, not just in theory.
-- Startup SQLite integrity check + corrupt-database rename-and-rebuild (AGENT.md sec.33).
-- A conflict-resolution UI for the external-edit-vs-unsaved-changes case; the Rust layer already detects it (`save_entry`'s `expected_content` parameter) but nothing surfaces it to the user yet.
-
-The full test suite (`ai_daemon/tests` + `tests/`, including `tests/rag/test_eval.py`) passes on both the extension-capable runtime and the fallback runtime — see `docs/rag.md`.
+See the limitations in [system-design.md](system-design.md#10-known-limitations-and-what-youd-change-next) and the "Not working or not built yet" table in the README. The frontend, conflict-resolution UI, chat history and packaging described as future work in earlier versions of this page have since been built (see `docs/progress.md`). AI calls time out after 180 s per line (streamed answers keep the request alive); quick calls after 5 s.

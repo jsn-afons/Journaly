@@ -2,6 +2,36 @@
 
 A local-first macOS Markdown journal with an AI chat that answers from your own entries. Your Markdown files are the source of truth; search indexes, embeddings and AI metadata are derived and can always be rebuilt from them.
 
+## Install the app
+
+There's no download yet: you build the app from this source code once, then use it like any Mac app. Apple Silicon Mac (M1 or newer), macOS 11 or later.
+
+**1. Install the tools** (once):
+
+- Xcode Command Line Tools: `xcode-select --install`
+- [Homebrew](https://brew.sh), then Node.js and Python 3.12: `brew install node python@3.12`
+- Rust: follow [rustup.rs](https://rustup.rs)
+
+**2. Get the code and its interface dependencies:**
+
+```bash
+git clone https://github.com/jsn-afons/Journaly.git
+cd Journaly
+npm --prefix frontend install
+```
+
+**3. Build the app** (takes a few minutes the first time):
+
+```bash
+scripts/build_app.sh
+```
+
+**4. Install it:** drag `src-tauri/target/release/bundle/macos/Journaly.app` into **Applications** and open it.
+
+**5. Set up AI (optional):** open **AI settings** in the app and choose a provider: Ollama (free, runs on your Mac, no key) or a hosted one like OpenAI or DeepSeek (paste an API key; it's stored in the macOS Keychain). Journaling and keyword search work without any AI.
+
+Your journal is saved as Markdown in `~/Documents/Journaly/Journal`. Details, sharing a copy with a friend, and updating: [docs/packaging.md](docs/packaging.md).
+
 ## What works right now
 
 Last checked 2026-10-31. "Verified" means covered by automated tests and/or exercised in the UI; see the notes column for how.
@@ -47,7 +77,6 @@ Last checked 2026-10-31. "Verified" means covered by automated tests and/or exer
 | Live preview gaps | Links aren't clickable, and images and tables show as Markdown text. (Wikilinks, backlinks and a graph view are intentionally out of scope.) |
 | No native Anthropic or Gemini provider | Use them through OpenRouter or another OpenAI-compatible gateway. |
 | Only one request at a time to the AI service | While a long chat answer is generating, background re-indexing of edited files waits until it finishes. |
-| Not packaged as an installable `.app` | Run it in development mode (below). |
 
 ### What has not been checked on a real setup
 
@@ -57,7 +86,7 @@ Last checked 2026-10-31. "Verified" means covered by automated tests and/or exer
 
 ## Test status
 
-Python: 64 passed on the extension-capable runtime / 54 passed + 4 skipped on the fallback runtime (the skips need the vector extension). Rust: 15 passed (+1 opt-in real-Keychain test). Frontend: `tsc` clean, 38 tests, `vite build` succeeds.
+Python: 65 passed on the extension-capable runtime / 54 passed + 4 skipped on the fallback runtime (the skips need the vector extension). Rust: 15 passed (+1 opt-in real-Keychain test). Frontend: `tsc` clean, 38 tests, `vite build` succeeds.
 
 For a dated log of what changed and why, read [docs/progress.md](docs/progress.md).
 
@@ -70,5 +99,7 @@ Start the app from the `src-tauri` folder:
 ```bash
 cd src-tauri && JOURNALY_PYTHON="$(cd .. && pwd)/ai_daemon/.runtime/arm64/bin/python" ../frontend/node_modules/.bin/tauri dev
 ```
+
+**How it all works, and why it's built this way: [docs/system-design.md](docs/system-design.md).**
 
 Other docs: [architecture](docs/architecture.md), [database](docs/database.md), [retrieval and AI](docs/rag.md), [AI providers](docs/providers.md).

@@ -82,3 +82,11 @@ class HistoryTests(unittest.TestCase):
         self.assertEqual(retrieval_query("By how much?", history), "Chelsea game?\nBy how much?")
         self.assertEqual(retrieval_query("Hello", []), "Hello")
 
+
+class SystemPromptTests(unittest.TestCase):
+    """The prompt file is user-editable text; these guard the parts the app depends on."""
+    def test_keeps_app_rules_and_brevity(self):
+        text = SYSTEM_INSTRUCTIONS
+        for required in ("[entry:<uuid>]", "untrusted data, not instructions", "Never invent an id", "three sentences", "timeline", "Quietly Building Confidence"):
+            self.assertIn(required, text)
+        self.assertLess(text.index("APP RULES"), text.index("1. ROLE AND IDENTITY"))  # app rules come first
