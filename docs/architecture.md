@@ -10,6 +10,10 @@ Embeddings and chat generation both sit behind async provider contracts (`ai_dae
 
 `ai_daemon/retrieval/` owns everything downstream of "the two search paths exist": `search.py` (FTS5 + vector search functions), `fusion.py` (Reciprocal Rank Fusion), `temporal.py` (heuristic recency/recurrence reranking), `context.py` (prompt assembly, prompt-injection defense, citation validation), and `service.py` (`RetrievalService`, the orchestrator the RPC layer calls). See `docs/rag.md` for the full pipeline description and its current limitations.
 
+## Frontend
+
+`App.tsx` owns navigation (grid / editor / settings), the open entry and autosave (`lib/autosave.ts`). Layout: `Sidebar`, header `Search`, `EntryGrid` or `EntryView` or `Settings`, and the `AiPanel` drawer (`Chat`, `Inspector`). Styling is one token-based stylesheet with light and dark values (`lib/theme.ts` switches `data-theme`). React still talks only to Tauri commands.
+
 ## Background embedding
 
 Rust owns scheduling: `embedder.rs` asks the daemon to embed pending chunks after file changes, at startup and after settings changes, with exponential backoff on failure. See `docs/rag.md`.

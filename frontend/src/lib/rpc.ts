@@ -3,7 +3,7 @@ import type { ChatResult, KeywordHit, RetrievalDiagnostics } from "../types/ai";
 import type { KeyChange, KeyRole, ProviderSettings, ProviderTestResult, SettingsView } from "../types/settings";
 
 export interface HealthResponse { status: "ok"; service: "ai_daemon" }
-export interface EntrySummary { id: string; path: string; title: string; created_at: string }
+export interface EntrySummary { id: string; path: string; title: string; created_at: string; excerpt: string }
 export interface JournalEntry extends EntrySummary { content: string }
 
 export async function getHealth(): Promise<HealthResponse> {
@@ -14,7 +14,8 @@ export const journalRpc = {
   list: () => invoke<EntrySummary[]>("list_entries"),
   create: (title: string, content = "") => invoke<JournalEntry>("create_entry", { title, content }),
   get: (path: string) => invoke<JournalEntry>("get_entry", { path }),
-  save: (path: string, content: string, expectedContent: string) => invoke<JournalEntry>("save_entry", { path, content, expectedContent }),
+  /** `expectedContent` = what we last read/saved; the save is refused (CONFLICT) if the file changed since. `null` overwrites. */
+  save: (path: string, content: string, expectedContent: string | null) => invoke<JournalEntry>("save_entry", { path, content, expectedContent }),
   rename: (path: string, title: string) => invoke<JournalEntry>("rename_entry", { path, title }),
   remove: (path: string) => invoke<void>("delete_entry", { path }),
   search: (query: string) => invoke<EntrySummary[]>("search_journal", { query }),

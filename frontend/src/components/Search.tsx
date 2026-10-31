@@ -1,67 +1,59 @@
 import { useEffect, useRef, useState } from "react";
 import { aiRpc, journalRpc } from "../lib/rpc";
 import { describeFailure } from "../lib/errors";
-import { splitMarks } from "../lib/citations";
 import type { RetrievalDiagnostics } from "../types/ai";
-import { titleFromPath } from "./Citation";
+import { Icon } from "./Icon";
 
-type Mode = "normal" | "ai";
-interface Hit { key: string; path: string; heading: string; snippet: string; created_at: string; score?: number }
-interface Props { onOpen(path: string): void; onActive(active: boolean): void; onDiagnostics(d: RetrievalDiagnostics): void }
+export type SearchMode = "normal" | "ai";
+export interface SearchHit { key: string; path: string; heading: string; snippet: string; created_at: string; score?: number }
+/** `hits` is null when the search box is empty (show all entries instead). */
+export interface SearchState { query: string; hits: SearchHit[] | null; notice: string; loading: boolean }
+
+interface Props { onChange(state: SearchState): void; onDiagnostics(d: RetrievalDiagnostics): void }
 
 const DEBOUNCE_MS = 250;
 
-/** Normal mode: offline FTS5/BM25. AI mode: hybrid FTS + vector + RRF + temporal rerank. */
-export function Search({ onOpen, onActive, onDiagnostics }: Props) {
-  const [mode, setMode] = useState<Mode>("normal");
+/** Pill search in the header. Normal: offline FTS5/BM25. AI: hybrid FTS + vector + RRF + temporal rerank. */
+export function Search({ onChange, onDiagnostics }: Props) {
+  const [mode, setMode] = useState<SearchMode>("normal");
   const [query, setQuery] = useState("");
-  const [hits, setHits] = useState<Hit[]>([]);
-  const [notice, setNotice] = useState("");
   const latest = useRef(0);
 
   useEffect(() => {
-    onActive(query.trim() !== "");
-    if (!query.trim()) { setHits([]); setNotice(""); return; }
+    if (!query.trim()) { onChange({ query, hits: null, notice: "", loading: false }); return; }
     const ticket = ++latest.current;
+    onChange({ query, hits: [], notice: "", loading: true });
     const timer = setTimeout(async () => {
+      const publish = (hits: SearchHit[], notice = "") => { if (ticket === latest.current) onChange({ query, hits, notice, loading: false }); };
       try {
-        let next: Hit[]; let message = "";
         if (mode === "ai") {
           const result = await aiRpc.hybrid(query);
           onDiagnostics(result);
-          next = result.final_results.map((c) => ({ key: c.chunk_id, path: c.filepath, heading: c.heading, snippet: c.raw_content.slice(0, 160), created_at: c.created_at, score: c.temporal_score }));
-          if (result.vector_error) message = `Keyword results only — ${result.vector_error}`;
+          publish(result.final_results.map((c) => ({ key: c.chunk_id, path: c.filepath, heading: c.heading, snippet: c.raw_content.slice(0, 220), created_at: c.created_at, score: c.temporal_score })),
+            result.vector_error ? `Keyword results only — ${result.vector_error}` : "");
         } else {
-          next = (await aiRpc.keyword(query)).results.map((h) => ({ key: h.chunk_id, path: h.filepath, heading: h.heading, snippet: h.snippet, created_at: h.created_at }));
+          publish((await aiRpc.keyword(query)).results.map((h) => ({ key: h.chunk_id, path: h.filepath, heading: h.heading, snippet: h.snippet, created_at: h.created_at })));
         }
-        if (ticket === latest.current) { setHits(next); setNotice(message); }
       } catch (error) {
         if (ticket !== latest.current) return;
-        if (mode === "normal") { // keep search usable if the daemon is down: fall back to the Rust filename/content scan
+        if (mode === "normal") { // keep search usable if the index service is down: fall back to the Rust file scan
           const files = await journalRpc.search(query).catch(() => []);
-          setHits(files.map((f) => ({ key: f.path, path: f.path, heading: "", snippet: "", created_at: f.created_at })));
-          setNotice("Index unavailable — showing basic file search");
-        } else { setHits([]); setNotice(describeFailure(error)); }
+          publish(files.map((f) => ({ key: f.path, path: f.path, heading: "", snippet: f.excerpt, created_at: f.created_at })), "Index unavailable — showing basic file search");
+        } else publish([], describeFailure(error));
       }
     }, DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [query, mode]);
 
   return <div className="search">
-    <div className="mode-toggle" role="group" aria-label="Search mode">
-      <button className={mode === "normal" ? "on" : ""} onClick={() => setMode("normal")}>Normal</button>
-      <button className={mode === "ai" ? "on" : ""} onClick={() => setMode("ai")}>AI</button>
+    <div className="search-pill">
+      <Icon name="search" size={13} />
+      <input aria-label="Search journal" placeholder={mode === "ai" ? "Search by meaning…" : "Search your journal"} value={query} onChange={(e) => setQuery(e.target.value)} />
+      {query && <button className="icon-button" aria-label="Clear search" onClick={() => setQuery("")}><Icon name="close" size={12} /></button>}
     </div>
-    <input aria-label="Search journal" placeholder={mode === "ai" ? "Search by meaning" : "Search journal"} value={query} onChange={(e) => setQuery(e.target.value)} />
-    {notice && <p className="notice">{notice}</p>}
-    {query.trim() && <nav className="hits">
-      {hits.length === 0 && !notice && <p className="notice">No matches</p>}
-      {hits.map((hit) => <button className="entry" key={hit.key} onClick={() => onOpen(hit.path)}>
-        <span>{titleFromPath(hit.path)}</span>
-        {hit.heading && <small>{hit.heading}</small>}
-        {hit.snippet && <small className="snippet">{splitMarks(hit.snippet).map((p, i) => p.hit ? <mark key={i}>{p.text}</mark> : p.text)}</small>}
-        <small>{new Date(hit.created_at).toLocaleDateString()}{hit.score !== undefined && ` · ${hit.score.toFixed(3)}`}</small>
-      </button>)}
-    </nav>}
+    <div className="segmented" role="group" aria-label="Search mode">
+      <button className={mode === "normal" ? "on" : ""} aria-pressed={mode === "normal"} onClick={() => setMode("normal")} title="Keyword search (works offline)"><Icon name="search" size={12} /><span className="label">Keyword</span></button>
+      <button className={mode === "ai" ? "on" : ""} aria-pressed={mode === "ai"} onClick={() => setMode("ai")} title="Search by meaning (needs an AI provider)"><Icon name="sparkles" size={12} /><span className="label">AI</span></button>
+    </div>
   </div>;
 }

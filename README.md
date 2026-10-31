@@ -12,6 +12,9 @@ Last checked 2026-10-31. "Verified" means covered by automated tests and/or exer
 |---|---|---|
 | Create, open, edit, rename, delete entries | ✅ Working | Files live in `Journal/YYYY/MM/Title.md` with immutable `id`/`created_at` frontmatter. Rust unit tests. |
 | Safe saving | ✅ Working | Atomic writes (temp file + rename); duplicate titles get `Title 2.md`. |
+| **Autosave** | ✅ Working (new) | Saves about 1.2 s after you stop typing; ⌘S, switching entries, going back to the grid, or the window losing focus saves immediately. The title renames the file when you leave the title field (or press Enter). The status pill shows Edited / Saving… / Saved 10:42. Saver logic unit-tested; flows exercised in the browser with a simulated backend. |
+| **Conflict handling** | ✅ Working (new) | If the file was changed outside Journaly while you were editing, autosave pauses and a banner offers **Keep my version** or **Use the version on disk**. Nothing is overwritten silently. Other save errors show **Try again**. |
+| **New look + dark mode** | ✅ Working (new) | Minimal macOS-style layout from `mock-frontend.html`: sidebar, pastel entry cards (colour by month), focused editor, AI Copilot drawer. **Dark mode** toggle in the sidebar, remembered between launches; light is the default. |
 | Edits made outside the app | ✅ Working | Detected by the file watcher (1.5 s debounce) and re-indexed; files without frontmatter are adopted without losing content. |
 | Keyword search (Normal mode) | ✅ Working | SQLite FTS5/BM25 with stemming, highlighted snippets. Falls back to a simple file scan if the index service is down. |
 | Index rebuilt from Markdown | ✅ Working (backend) | `rebuild_index` works and is tested, but there is **no button for it in the app yet**. |
@@ -34,8 +37,9 @@ Last checked 2026-10-31. "Verified" means covered by automated tests and/or exer
 
 | Gap | What that means for you |
 |---|---|
-| No autosave | You must press **Save**. |
-| No conflict-resolution screen | If a file changed on disk while you were editing, saving is refused with a "Save conflict" message (your edits aren't lost, but there's no side-by-side view to choose a version). |
+| Open entry doesn't refresh from outside edits | If another app changes the entry you have open and you haven't typed since, the editor keeps showing the old text until you reopen it. If you *have* typed, the conflict banner appears instead. |
+| No side-by-side diff in a conflict | You choose a whole version (yours or the disk's); there's no line-by-line merge. |
+| Card grid has no favourites, tags or folders | The mock's placeholder sections (Favorites, Tags, Notebooks) were left out because the app has no such data yet. |
 | No "Rebuild index" button | Only possible from the backend. (Re-embedding now happens automatically.) |
 | No startup database corruption recovery | If the index database is corrupted you'd have to delete `journal_index.db` yourself; your Markdown is unaffected either way. |
 | Chats are not saved | Closing the app or switching away loses the conversation; chats are not stored as Markdown. |
@@ -47,12 +51,12 @@ Last checked 2026-10-31. "Verified" means covered by automated tests and/or exer
 ### What has not been checked on a real setup
 
 - A full chat with a hosted provider and a real API key (none available yet).
-- Clicking through the native app window itself: the UI has been exercised in a browser with a simulated or bridged backend. The native app has been launched and its AI service starts.
+- Clicking through the native app window itself: the UI (including the new design, dark mode, and autosave) has been exercised in a browser with a simulated backend. The native app has been launched and its AI service starts, but the redesign has not been seen inside it yet.
 - Live tests against local models are deliberately **not** run on this laptop (too heavy). Provider behaviour is covered by mock-server tests.
 
 ## Test status
 
-Python: 58 passed on the extension-capable runtime / 54 passed + 4 skipped on the fallback runtime (the skips need the vector extension). Rust: 10 passed (+1 opt-in real-Keychain test). Frontend: `tsc` clean, 10 tests, `vite build` succeeds.
+Python: 58 passed on the extension-capable runtime / 54 passed + 4 skipped on the fallback runtime (the skips need the vector extension). Rust: 11 passed (+1 opt-in real-Keychain test). Frontend: `tsc` clean, 21 tests, `vite build` succeeds.
 
 For a dated log of what changed and why, read [docs/progress.md](docs/progress.md).
 

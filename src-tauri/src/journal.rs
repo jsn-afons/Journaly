@@ -5,7 +5,8 @@ use uuid::Uuid;
 use crate::errors::AppError;
 
 #[derive(Debug, Clone, Serialize)]
-pub struct EntrySummary { pub id: Uuid, pub path: String, pub title: String, pub created_at: DateTime<Utc> }
+/// `excerpt` is a short plain-text preview for entry cards; it is derived, never written to disk.
+pub struct EntrySummary { pub id: Uuid, pub path: String, pub title: String, pub created_at: DateTime<Utc>, pub excerpt: String }
 #[derive(Debug, Clone, Serialize)]
 pub struct JournalEntry { #[serde(flatten)] pub summary: EntrySummary, pub content: String }
 
@@ -29,7 +30,7 @@ impl JournalService {
         let now = Utc::now(); let safe_title = sanitize_title(title)?;
         let relative = PathBuf::from(now.format("%Y/%m").to_string()).join(format!("{safe_title}.md"));
         let relative = self.available_path(relative)?;
-        let entry = JournalEntry { summary: EntrySummary { id: Uuid::new_v4(), path: path_string(&relative), title: display_title(&relative), created_at: now }, content: content.to_owned() };
+        let entry = JournalEntry { summary: EntrySummary { id: Uuid::new_v4(), path: path_string(&relative), title: display_title(&relative), created_at: now, excerpt: excerpt_of(content) }, content: content.to_owned() };
         self.write_entry(&relative, &entry)?; Ok(entry)
     }
 
@@ -40,7 +41,7 @@ impl JournalService {
     pub fn save_entry(&self, relative: &str, content: &str, expected_content: Option<&str>) -> Result<JournalEntry, AppError> {
         let relative = self.valid_relative(relative)?; let current = self.read_entry(&relative)?;
         if let Some(expected) = expected_content { if current.content != expected { return Err(AppError::Conflict); } }
-        let entry = JournalEntry { content: content.to_owned(), ..current };
+        let entry = JournalEntry { summary: EntrySummary { excerpt: excerpt_of(content), ..current.summary }, content: content.to_owned() };
         self.write_entry(&relative, &entry)?; Ok(entry)
     }
 
@@ -66,12 +67,12 @@ impl JournalService {
         let path = self.resolve_existing(relative)?; let raw = fs::read_to_string(path).map_err(AppError::journal)?;
         if !raw.starts_with("---\n") {
             // Birth time is not portable through Rust's stable metadata API. Discovery time is the documented fallback.
-            let adopted = JournalEntry { summary: EntrySummary { id: Uuid::new_v4(), path: path_string(relative), title: display_title(relative), created_at: Utc::now() }, content: raw };
+            let adopted = JournalEntry { summary: EntrySummary { id: Uuid::new_v4(), path: path_string(relative), title: display_title(relative), created_at: Utc::now(), excerpt: excerpt_of(&raw) }, content: raw };
             self.write_entry(relative, &adopted)?;
             return Ok(adopted);
         }
         let (id, created_at, content) = parse_frontmatter(&raw)?;
-        Ok(JournalEntry { summary: EntrySummary { id, path: path_string(relative), title: display_title(relative), created_at }, content })
+        Ok(JournalEntry { summary: EntrySummary { id, path: path_string(relative), title: display_title(relative), created_at, excerpt: excerpt_of(&content) }, content })
     }
     fn write_entry(&self, relative: &Path, entry: &JournalEntry) -> Result<(), AppError> {
         let target = self.resolve_new(relative)?; let parent = target.parent().ok_or(AppError::PathOutsideJournal)?; fs::create_dir_all(parent).map_err(AppError::journal)?;
@@ -93,6 +94,15 @@ fn parse_frontmatter(raw: &str) -> Result<(Uuid, DateTime<Utc>, String), AppErro
 }
 fn atomic_write(target: &Path, bytes: &[u8]) -> io::Result<()> { let parent = target.parent().ok_or_else(|| io::Error::other("no parent"))?; let temp = parent.join(format!(".{}.{}.tmp", target.file_name().and_then(|x| x.to_str()).unwrap_or("entry"), Uuid::new_v4())); let mut file = fs::File::create(&temp)?; file.write_all(bytes)?; file.sync_all()?; fs::rename(temp, target) }
 fn sanitize_title(input: &str) -> Result<String, AppError> { let title = input.trim().replace(['/', '\\', ':'], "-"); if title.is_empty() || title == "." || title == ".." { Err(AppError::InvalidTitle("title is required".into())) } else { Ok(title.chars().take(120).collect()) } }
+const EXCERPT_CHARS: usize = 220;
+/// Body text without Markdown heading lines, whitespace collapsed, cut at a word boundary.
+fn excerpt_of(content: &str) -> String {
+    let text = content.lines().filter(|line| !line.trim_start().starts_with('#')).collect::<Vec<_>>().join(" ");
+    let collapsed = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if collapsed.chars().count() <= EXCERPT_CHARS { return collapsed; }
+    let cut: String = collapsed.chars().take(EXCERPT_CHARS).collect();
+    format!("{}…", cut.rsplit_once(' ').map(|(head, _)| head).unwrap_or(&cut))
+}
 fn display_title(path: &Path) -> String { path.file_stem().and_then(|x| x.to_str()).unwrap_or("Untitled").to_owned() }
 fn path_string(path: &Path) -> String { path.to_string_lossy().replace('\\', "/") }
 
@@ -102,5 +112,6 @@ mod tests {
     fn service() -> (JournalService, PathBuf) { let root = std::env::temp_dir().join(format!("journaly-test-{}", Uuid::new_v4())); (JournalService::new(root.clone()).unwrap(), root) }
     #[test] fn creates_collision_safe_files_and_preserves_dates() { let (journal, root) = service(); let first = journal.create_entry("Ideas", "one").unwrap(); let second = journal.create_entry("Ideas", "two").unwrap(); assert_eq!(second.summary.path, format!("{}/Ideas 2.md", Utc::now().format("%Y/%m"))); let saved = journal.save_entry(&first.summary.path, "changed", Some("one")).unwrap(); assert_eq!(saved.summary.created_at, first.summary.created_at); fs::remove_dir_all(root).unwrap(); }
     #[test] fn rejects_traversal_and_detects_conflict() { let (journal, root) = service(); let entry = journal.create_entry("Safe", "first").unwrap(); assert!(journal.get_entry("../secret.md").is_err()); assert!(matches!(journal.save_entry(&entry.summary.path, "second", Some("stale")), Err(AppError::Conflict))); fs::remove_dir_all(root).unwrap(); }
+    #[test] fn excerpt_skips_headings_and_is_bounded() { assert_eq!(excerpt_of("# Title\n\nFirst  line.\n## Sub\nSecond"), "First line. Second"); let long = "word ".repeat(100); let excerpt = excerpt_of(&long); assert!(excerpt.ends_with('…') && excerpt.chars().count() <= EXCERPT_CHARS + 1); }
     #[test] fn adopts_external_markdown_without_destroying_content() { let (journal, root) = service(); fs::create_dir_all(root.join("2026/08")).unwrap(); fs::write(root.join("2026/08/External.md"), "# Original\n\nUnchanged body.").unwrap(); let entry = journal.get_entry("2026/08/External.md").unwrap(); assert_eq!(entry.content, "# Original\n\nUnchanged body."); let on_disk = fs::read_to_string(root.join("2026/08/External.md")).unwrap(); assert!(on_disk.contains("created_at:")); assert!(on_disk.ends_with("# Original\n\nUnchanged body.")); fs::remove_dir_all(root).unwrap(); }
 }

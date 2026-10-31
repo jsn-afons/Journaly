@@ -4,6 +4,6 @@
   "version": "0.1.0",
   "identifier": "com.journaly.app",
   "build": { "beforeDevCommand": "npm --prefix frontend run dev", "beforeBuildCommand": "npm --prefix frontend run build", "devUrl": "http://localhost:1420", "frontendDist": "../frontend/dist" },
-  "app": { "windows": [{ "title": "Journaly", "width": 1000, "height": 700 }], "security": { "csp": "default-src 'self'; style-src 'self' 'unsafe-inline';" } },
+  "app": { "windows": [{ "title": "Journaly", "width": 1320, "height": 840, "minWidth": 900, "minHeight": 600 }], "security": { "csp": "default-src 'self'; style-src 'self' 'unsafe-inline';" } },
   "bundle": { "active": true, "targets": "app" }
 }

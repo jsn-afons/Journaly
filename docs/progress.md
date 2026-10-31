@@ -2,6 +2,22 @@
 
 Newest first. Updated as work happens, so this always says where the project is.
 
+## Redesign, dark mode, autosave (2026-10-31)
+
+**Redesign** (from `mock-frontend.html`): rebuilt the frontend as sidebar + header (breadcrumb, pill search with Keyword/AI toggle, New, AI Copilot) + content + collapsible AI drawer. New components: `EntryGrid` (pastel cards, colour by month, excerpts), `EntryView` (centred editor), `AiPanel` (Chat + Inspector tabs; chat stays mounted), `Icon` (inline SVG; the CSP blocks icon CDNs). `styles.css` rewritten around light/dark design tokens; CodeMirror themed from the same tokens. Header collapses to icon buttons when narrow; the AI drawer opens by default only on windows ≥1200 px; default window size raised to 1320×840 (min 900×600). Rust `EntrySummary` gained an `excerpt` (derived preview, never written to disk; unit-tested). Placeholder sections from the mock (Favorites, Tags, Notebooks, profile) were not copied, since the app has nothing behind them.
+
+**Dark mode**: sidebar toggle; stored in `localStorage` (`journaly.theme`) and applied as `data-theme` on `<html>`; light by default; storage failures fall back to light.
+
+**Autosave** (`lib/autosave.ts` + `App.tsx`): debounced 1.2 s, saves never overlap, latest text always wins; flush on ⌘S, window blur, switching entry/view, creating; title renames on blur/Enter. A CONFLICT pauses autosave and shows a banner (Keep my version → overwrite; Use the version on disk → reload); other errors show Try again. The Save button was removed.
+
+**Bugs found and fixed while testing**: citation card overflowed the narrow drawer (now anchored to the chat column); header controls overlapped at mid widths; typing during a conflict replaced the conflict banner with "Edited" while autosave stayed paused (state now sticks until resolved).
+
+**Verified**: frontend 21 tests (new: autosave ×5, theme ×3, card helpers ×3), `tsc`, build; Rust 11 (new: excerpt); Python unchanged and passing. In the browser pane with a simulated backend: grid, search with highlights, open/edit/rename/delete, chat streaming + citations + Inspector, AI settings, dark mode on every view, autosave debounce, rename on blur, both conflict choices, and save-before-switch.
+
+**Not verified**: the redesign inside the native Tauri window; focus-dependent behaviour (window blur save) in the real app.
+
+**Next**: Rebuild-index button; refresh an open, unedited entry when it changes on disk; saving chats; startup corruption recovery.
+
 ## Automatic background embedding (2026-10-31)
 
 **Done**

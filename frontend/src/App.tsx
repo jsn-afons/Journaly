@@ -1,44 +1,153 @@
 import { useEffect, useRef, useState } from "react";
-import { Chat } from "./components/Chat";
-import { Editor } from "./components/Editor";
-import { Inspector } from "./components/Inspector";
+import { AiPanel } from "./components/AiPanel";
+import { EntryGrid } from "./components/EntryGrid";
+import { EntryView, type SaveState } from "./components/EntryView";
+import { Icon } from "./components/Icon";
+import { Search, type SearchState } from "./components/Search";
 import { Settings } from "./components/Settings";
-import { Sidebar } from "./components/Sidebar";
+import { Sidebar, type View } from "./components/Sidebar";
 import type { RetrievalDiagnostics } from "./types/ai";
 import type { SettingsView } from "./types/settings";
-import { describeFailure } from "./lib/errors";
-import { getHealth, journalRpc, settingsRpc, type EntrySummary, type HealthResponse, type JournalEntry } from "./lib/rpc";
+import { asFailure, describeFailure } from "./lib/errors";
+import { Autosaver } from "./lib/autosave";
+import { applyTheme, loadTheme, type Theme } from "./lib/theme";
+import { getHealth, journalRpc, settingsRpc, type EntrySummary, type JournalEntry } from "./lib/rpc";
 
 type Status = { kind: "loading" | "ready" | "error"; text: string };
+const WIDE_WINDOW = 1200;
+/** Quiet period after the last keystroke before writing to disk. */
+const AUTOSAVE_DELAY_MS = 1200;
+type Draft = { path: string; content: string };
+const EMPTY_SEARCH: SearchState = { query: "", hits: null, notice: "", loading: false };
 
 export function App() {
   const [status, setStatus] = useState<Status>({ kind: "loading", text: "Connecting to local services…" });
   const [entries, setEntries] = useState<EntrySummary[]>([]);
   const [entry, setEntry] = useState<JournalEntry | null>(null);
-  const [view, setView] = useState<"editor" | "chat" | "settings">("editor");
+  const [view, setView] = useState<View>("grid");
+  const [search, setSearch] = useState<SearchState>(EMPTY_SEARCH);
   const [diagnostics, setDiagnostics] = useState<RetrievalDiagnostics | null>(null);
   const [provider, setProvider] = useState<SettingsView | null>(null);
-  const [showInspector, setShowInspector] = useState(false);
-  const [saveStatus, setSaveStatus] = useState("Saved");
-  const persisted = useRef("");
+  // The drawer starts open only when there is room for it beside the entries.
+  const [aiOpen, setAiOpen] = useState(() => window.innerWidth >= WIDE_WINDOW);
+  const [theme, setTheme] = useState<Theme>(loadTheme);
+  const [save, setSaveState] = useState<SaveState>({ kind: "saved", at: null });
+  const saveRef = useRef<SaveState>(save);
+  const setSave = (next: SaveState) => { saveRef.current = next; setSaveState(next); };
+  const entryRef = useRef<JournalEntry | null>(null);
+  const persisted = useRef("");          // content as last read from / written to disk
   const persistedTitle = useRef("");
 
-  const refreshHealth = async () => { try { const result: HealthResponse = await getHealth(); setStatus({ kind: "ready", text: `${result.service} is ${result.status}` }); } catch (error) { setStatus({ kind: "error", text: describeFailure(error) }); } };
+  useEffect(() => applyTheme(theme), [theme]);
+  const showEntry = (next: JournalEntry | null) => { entryRef.current = next; setEntry(next); };
+
+  const refreshHealth = async () => { try { const result = await getHealth(); setStatus({ kind: "ready", text: `${result.service} is ${result.status}` }); } catch (error) { setStatus({ kind: "error", text: describeFailure(error) }); } };
   const refreshEntries = async () => setEntries(await journalRpc.list());
-  const open = async (path: string) => { setView("editor"); const loaded = await journalRpc.get(path); persisted.current = loaded.content; persistedTitle.current = loaded.title; setEntry(loaded); setSaveStatus("Saved"); };
-  const create = async () => { const created = await journalRpc.create("Untitled", "# Untitled\n\n"); await refreshEntries(); await open(created.path); };
-  const save = async () => { if (!entry) return; setSaveStatus("Saving…"); try { const renamed = entry.title === persistedTitle.current ? entry : await journalRpc.rename(entry.path, entry.title); const saved = await journalRpc.save(renamed.path, entry.content, persisted.current); persisted.current = saved.content; persistedTitle.current = saved.title; setEntry(saved); setSaveStatus("Saved"); await refreshEntries(); } catch (error) { setSaveStatus(`Save conflict: ${describeFailure(error)}`); } };
-  const remove = async () => { if (!entry || !window.confirm(`Delete ${entry.title}?`)) return; await journalRpc.remove(entry.path); setEntry(null); setSaveStatus("Saved"); await refreshEntries(); };
-  const edit = (content: string) => { if (!entry) return; setEntry({ ...entry, content }); setSaveStatus("Unsaved changes"); };
+
+  const saver = useRef<Autosaver<Draft>>();
+  if (!saver.current) {
+    saver.current = new Autosaver<Draft>(async ({ path, content }) => {
+      setSave({ kind: "saving" });
+      const saved = await journalRpc.save(path, content, persisted.current);
+      persisted.current = saved.content;
+      setSave(saver.current!.hasPending ? { kind: "pending" } : { kind: "saved", at: new Date() });
+      void refreshEntries();
+    }, AUTOSAVE_DELAY_MS, (error) => setSave(asFailure(error).code === "CONFLICT" ? { kind: "conflict" } : { kind: "error", message: describeFailure(error) }));
+  }
+
+  /** Rename the file if the title changed. Called when the title field loses focus and before leaving an entry. */
+  const commitTitle = async () => {
+    const current = entryRef.current;
+    if (!current || current.title === persistedTitle.current) return;
+    try {
+      await saver.current!.flush();
+      const renamed = await journalRpc.rename(current.path, current.title);
+      persistedTitle.current = renamed.title;
+      showEntry({ ...entryRef.current!, path: renamed.path, title: renamed.title });
+      await refreshEntries();
+    } catch (error) {
+      setSave({ kind: "error", message: describeFailure(error) });
+      showEntry({ ...entryRef.current!, title: persistedTitle.current });   // keep the file's real name
+    }
+  };
+  /** Write anything pending before switching away from the current entry. */
+  const leaveEntry = async () => { await commitTitle(); await saver.current!.flush(); };
+
+  const navigate = async (next: View) => { await leaveEntry(); setView(next); };
+  const open = async (path: string) => {
+    await leaveEntry();
+    const loaded = await journalRpc.get(path);
+    persisted.current = loaded.content; persistedTitle.current = loaded.title;
+    saver.current!.discard(); showEntry(loaded); setSave({ kind: "saved", at: null }); setView("editor");
+  };
+  const create = async () => { await leaveEntry(); const created = await journalRpc.create("Untitled", "# Untitled\n\n"); await refreshEntries(); await open(created.path); };
+  const remove = async () => {
+    const current = entryRef.current;
+    if (!current || !window.confirm(`Delete “${current.title}”? The Markdown file will be removed.`)) return;
+    saver.current!.discard();
+    await journalRpc.remove(current.path); showEntry(null); setSave({ kind: "saved", at: null }); setView("grid"); await refreshEntries();
+  };
+  const edit = (content: string) => {
+    const current = entryRef.current; if (!current || content === current.content) return;
+    showEntry({ ...current, content });
+    // While a conflict or error is unresolved, autosave is paused; keep saying so instead of a misleading "Edited".
+    const blocked = saveRef.current.kind === "conflict" || saveRef.current.kind === "error";
+    if (!blocked) setSave({ kind: "pending" });
+    saver.current!.change({ path: current.path, content });
+  };
+  const retitle = (title: string) => { const current = entryRef.current; if (current) showEntry({ ...current, title }); };
+
+  // Conflict resolution: the file changed on disk after we last read it.
+  const keepMine = async () => {
+    const current = entryRef.current; if (!current) return;
+    try {
+      const saved = await journalRpc.save(current.path, current.content, null);
+      persisted.current = saved.content; saver.current!.discard(); setSave({ kind: "saved", at: new Date() }); void refreshEntries();
+    } catch (error) { setSave({ kind: "error", message: describeFailure(error) }); }
+  };
+  const useDisk = async () => {
+    const current = entryRef.current; if (!current) return;
+    const loaded = await journalRpc.get(current.path);
+    saver.current!.discard(); persisted.current = loaded.content; persistedTitle.current = loaded.title;
+    showEntry(loaded); setSave({ kind: "saved", at: null });
+  };
+
+  const retrySave = () => { setSave({ kind: "pending" }); saver.current!.resume(); };
+
+  // Save now on ⌘S, and whenever the window loses focus.
+  useEffect(() => {
+    const flushNow = () => void leaveEntry();
+    const onKey = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") { e.preventDefault(); flushNow(); } };
+    window.addEventListener("keydown", onKey); window.addEventListener("blur", flushNow);
+    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("blur", flushNow); };
+  }, []);
 
   useEffect(() => { void refreshHealth(); void settingsRpc.get().then(setProvider).catch(() => undefined); void refreshEntries(); }, []);
-  const editor = entry ? <><header><input className="title" value={entry.title} aria-label="Entry title" onChange={(event) => { setEntry({ ...entry, title: event.target.value }); setSaveStatus("Unsaved changes"); }} /><div><span>{saveStatus}</span><button onClick={() => void remove()}>Delete</button><button onClick={() => void save()} disabled={saveStatus === "Saved"}>Save</button></div></header><Editor value={entry.content} onChange={edit} /></> : <div className="empty">Create or select a Markdown entry.</div>;
-  return <main className={showInspector ? "app-shell with-inspector" : "app-shell"}>
-    <Sidebar entries={entries} activePath={entry?.path} status={status} onOpen={(path) => void open(path)} onCreate={() => void create()} onDiagnostics={setDiagnostics} />
+
+  const crumb = view === "settings" ? "AI settings" : view === "editor" && entry ? entry.title : search.hits ? "Search" : "All entries";
+
+  return <main className={aiOpen ? "app-shell with-ai" : "app-shell"}>
+    <Sidebar entries={entries} activePath={entry?.path} view={view} theme={theme} status={status}
+      onNavigate={(next) => void navigate(next)} onOpen={(path) => void open(path)} onCreate={() => void create()} onToggleTheme={() => setTheme(theme === "light" ? "dark" : "light")} />
     <section className="workspace">
-      <div className="tabs" role="tablist"><button role="tab" aria-selected={view === "editor"} className={view === "editor" ? "on" : ""} onClick={() => setView("editor")}>Editor</button><button role="tab" aria-selected={view === "chat"} className={view === "chat" ? "on" : ""} onClick={() => setView("chat")}>Chat</button><button role="tab" aria-selected={view === "settings"} className={view === "settings" ? "on" : ""} onClick={() => setView("settings")}>AI settings</button><button className={showInspector ? "on inspector-toggle" : "inspector-toggle"} onClick={() => setShowInspector(!showInspector)}>Inspector</button></div>
-      {view === "editor" ? <div className="pane">{editor}</div> : view === "chat" ? <Chat configured={provider?.configured ?? false} onOpenSettings={() => setView("settings")} onOpenEntry={(path) => void open(path)} onDiagnostics={setDiagnostics} /> : <Settings onSaved={setProvider} />}
+      <header className="app-header">
+        <div className="crumb">
+          {view !== "grid" && <button className="back" onClick={() => void navigate("grid")}><Icon name="back" size={11} /> Journal</button>}
+          {view !== "grid" && <span className="sep">/</span>}
+          <h1>{crumb}</h1>
+        </div>
+        <Search onChange={(next) => { setSearch(next); if (next.hits && view !== "grid") void navigate("grid"); }} onDiagnostics={setDiagnostics} />
+        <div className="header-actions">
+          <button className="outline" onClick={() => void create()} title="New entry"><Icon name="plus" /><span className="label">New</span></button>
+          <button className={aiOpen ? "dark on" : "dark"} onClick={() => setAiOpen(!aiOpen)} aria-pressed={aiOpen} title="AI Copilot"><Icon name="sparkles" /><span className="label">AI Copilot</span></button>
+        </div>
+      </header>
+      <div className="workspace-body">
+        {view === "settings" ? <Settings onSaved={setProvider} />
+          : view === "editor" && entry ? <EntryView entry={entry} save={save} onTitle={retitle} onTitleCommit={() => void commitTitle()} onContent={edit} onDelete={() => void remove()} onKeepMine={() => void keepMine()} onUseDisk={() => void useDisk()} onRetry={retrySave} />
+          : <EntryGrid entries={entries} search={search} onOpen={(path) => void open(path)} onCreate={() => void create()} />}
+      </div>
     </section>
-    {showInspector && <Inspector diagnostics={diagnostics} />}
+    {aiOpen && <AiPanel provider={provider} diagnostics={diagnostics} onClose={() => setAiOpen(false)} onOpenSettings={() => void navigate("settings")} onOpenEntry={(path) => void open(path)} onDiagnostics={setDiagnostics} />}
   </main>;
 }
