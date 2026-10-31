@@ -49,6 +49,7 @@ impl SidecarClient {
         self.call("health", serde_json::json!({})).await
     }
     pub async fn index_file(&self, path: &str) -> Result<serde_json::Value, AppError> { self.call("index_file", serde_json::json!({"path": path})).await }
+    pub async fn sync_index(&self) -> Result<serde_json::Value, AppError> { self.call_with_timeout("rebuild_index", serde_json::json!({}), AI_TIMEOUT).await }
     pub async fn remove_file(&self, path: &str) -> Result<serde_json::Value, AppError> { self.call("remove_file", serde_json::json!({"path": path})).await }
     /// Forward an AI/RAG request to the daemon. Embedding and LLM calls are network-bound, so they get a long timeout.
     pub async fn request(&self, method: &str, params: serde_json::Value) -> Result<serde_json::Value, AppError> { self.call_with_timeout(method, params, AI_TIMEOUT).await }

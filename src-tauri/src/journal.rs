@@ -1,8 +1,8 @@
-use std::{fs, io::{self, Write}, path::{Component, Path, PathBuf}};
+use std::{fs, path::{Path, PathBuf}};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use uuid::Uuid;
-use crate::errors::AppError;
+use crate::{errors::AppError, paths::{display_title, path_string, sanitize_title, Folder}};
 
 #[derive(Debug, Clone, Serialize)]
 /// `excerpt` is a short plain-text preview for entry cards; it is derived, never written to disk.
@@ -11,13 +11,12 @@ pub struct EntrySummary { pub id: Uuid, pub path: String, pub title: String, pub
 pub struct JournalEntry { #[serde(flatten)] pub summary: EntrySummary, pub content: String }
 
 #[derive(Clone)]
-pub struct JournalService { root: PathBuf }
+pub struct JournalService { root: PathBuf, folder: Folder }
 
 impl JournalService {
     pub fn new(root: PathBuf) -> Result<Self, AppError> {
-        fs::create_dir_all(&root).map_err(AppError::journal)?;
-        let root = root.canonicalize().map_err(AppError::journal)?;
-        Ok(Self { root })
+        let folder = Folder::new(root)?;
+        Ok(Self { root: folder.root().to_path_buf(), folder })
     }
 
     pub fn list_entries(&self) -> Result<Vec<EntrySummary>, AppError> {
@@ -29,31 +28,31 @@ impl JournalService {
     pub fn create_entry(&self, title: &str, content: &str) -> Result<JournalEntry, AppError> {
         let now = Utc::now(); let safe_title = sanitize_title(title)?;
         let relative = PathBuf::from(now.format("%Y/%m").to_string()).join(format!("{safe_title}.md"));
-        let relative = self.available_path(relative)?;
+        let relative = self.folder.available_path(relative)?;
         let entry = JournalEntry { summary: EntrySummary { id: Uuid::new_v4(), path: path_string(&relative), title: display_title(&relative), created_at: now, excerpt: excerpt_of(content) }, content: content.to_owned() };
         self.write_entry(&relative, &entry)?; Ok(entry)
     }
 
     pub fn get_entry(&self, relative: &str) -> Result<JournalEntry, AppError> {
-        let relative = self.valid_relative(relative)?; self.read_entry(&relative)
+        let relative = self.folder.valid_relative(relative)?; self.read_entry(&relative)
     }
 
     pub fn save_entry(&self, relative: &str, content: &str, expected_content: Option<&str>) -> Result<JournalEntry, AppError> {
-        let relative = self.valid_relative(relative)?; let current = self.read_entry(&relative)?;
+        let relative = self.folder.valid_relative(relative)?; let current = self.read_entry(&relative)?;
         if let Some(expected) = expected_content { if current.content != expected { return Err(AppError::Conflict); } }
         let entry = JournalEntry { summary: EntrySummary { excerpt: excerpt_of(content), ..current.summary }, content: content.to_owned() };
         self.write_entry(&relative, &entry)?; Ok(entry)
     }
 
     pub fn rename_entry(&self, relative: &str, title: &str) -> Result<JournalEntry, AppError> {
-        let old = self.valid_relative(relative)?; let entry = self.read_entry(&old)?; let new_name = sanitize_title(title)?;
-        let new = self.available_path(old.parent().unwrap_or(Path::new("")).join(format!("{new_name}.md")))?;
-        let from = self.resolve_existing(&old)?; let to = self.resolve_new(&new)?;
+        let old = self.folder.valid_relative(relative)?; let entry = self.read_entry(&old)?; let new_name = sanitize_title(title)?;
+        let new = self.folder.available_path(old.parent().unwrap_or(Path::new("")).join(format!("{new_name}.md")))?;
+        let from = self.folder.resolve_existing(&old)?; let to = self.folder.resolve_new(&new)?;
         fs::rename(from, to).map_err(AppError::journal)?;
         Ok(JournalEntry { summary: EntrySummary { path: path_string(&new), title: display_title(&new), ..entry.summary }, ..entry })
     }
 
-    pub fn delete_entry(&self, relative: &str) -> Result<(), AppError> { fs::remove_file(self.resolve_existing(&self.valid_relative(relative)?)?).map_err(AppError::journal) }
+    pub fn delete_entry(&self, relative: &str) -> Result<(), AppError> { fs::remove_file(self.folder.resolve_existing(&self.folder.valid_relative(relative)?)?).map_err(AppError::journal) }
 
     pub fn search_files(&self, query: &str) -> Result<Vec<EntrySummary>, AppError> {
         let needle = query.trim().to_lowercase(); if needle.is_empty() { return Ok(Vec::new()); }
@@ -64,7 +63,7 @@ impl JournalService {
         for item in fs::read_dir(directory).map_err(AppError::journal)? { let path = item.map_err(AppError::journal)?.path(); if path.is_dir() { self.collect_entries(&path, output)?; } else if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("md")) { let relative = path.strip_prefix(&self.root).map_err(|_| AppError::PathOutsideJournal)?.to_path_buf(); output.push(self.read_entry(&relative)?.summary); } } Ok(())
     }
     fn read_entry(&self, relative: &Path) -> Result<JournalEntry, AppError> {
-        let path = self.resolve_existing(relative)?; let raw = fs::read_to_string(path).map_err(AppError::journal)?;
+        let path = self.folder.resolve_existing(relative)?; let raw = fs::read_to_string(path).map_err(AppError::journal)?;
         if !raw.starts_with("---\n") {
             // Birth time is not portable through Rust's stable metadata API. Discovery time is the documented fallback.
             let adopted = JournalEntry { summary: EntrySummary { id: Uuid::new_v4(), path: path_string(relative), title: display_title(relative), created_at: Utc::now(), excerpt: excerpt_of(&raw) }, content: raw };
@@ -75,14 +74,9 @@ impl JournalService {
         Ok(JournalEntry { summary: EntrySummary { id, path: path_string(relative), title: display_title(relative), created_at, excerpt: excerpt_of(&content) }, content })
     }
     fn write_entry(&self, relative: &Path, entry: &JournalEntry) -> Result<(), AppError> {
-        let target = self.resolve_new(relative)?; let parent = target.parent().ok_or(AppError::PathOutsideJournal)?; fs::create_dir_all(parent).map_err(AppError::journal)?;
         let document = format!("---\nid: {}\ncreated_at: {}\n---\n{}", entry.summary.id, entry.summary.created_at.to_rfc3339(), entry.content);
-        atomic_write(&target, document.as_bytes()).map_err(AppError::journal)
+        self.folder.write(relative, &document)
     }
-    fn valid_relative(&self, value: &str) -> Result<PathBuf, AppError> { let path = PathBuf::from(value); if path.extension().is_none_or(|e| !e.eq_ignore_ascii_case("md")) || path.is_absolute() || path.components().any(|c| matches!(c, Component::ParentDir | Component::RootDir | Component::Prefix(_))) { return Err(AppError::PathOutsideJournal); } Ok(path) }
-    fn resolve_existing(&self, relative: &Path) -> Result<PathBuf, AppError> { let path = self.root.join(relative).canonicalize().map_err(AppError::journal)?; if path.starts_with(&self.root) { Ok(path) } else { Err(AppError::PathOutsideJournal) } }
-    fn resolve_new(&self, relative: &Path) -> Result<PathBuf, AppError> { let path = self.root.join(relative); let parent = path.parent().ok_or(AppError::PathOutsideJournal)?; let canonical_parent = parent.canonicalize().unwrap_or_else(|_| self.root.clone()); if canonical_parent.starts_with(&self.root) { Ok(path) } else { Err(AppError::PathOutsideJournal) } }
-    fn available_path(&self, desired: PathBuf) -> Result<PathBuf, AppError> { let stem = desired.file_stem().and_then(|s| s.to_str()).ok_or_else(|| AppError::InvalidTitle("invalid title".into()))?; let parent = desired.parent().unwrap_or(Path::new("")); for number in 1..10_000 { let candidate = if number == 1 { desired.clone() } else { parent.join(format!("{stem} {number}.md")) }; if !self.root.join(&candidate).exists() { return Ok(candidate); } } Err(AppError::InvalidTitle("too many entries with this title".into())) }
 }
 
 fn parse_frontmatter(raw: &str) -> Result<(Uuid, DateTime<Utc>, String), AppError> {
@@ -92,8 +86,6 @@ fn parse_frontmatter(raw: &str) -> Result<(Uuid, DateTime<Utc>, String), AppErro
     for line in header.lines() { if let Some(value) = line.strip_prefix("id:") { id = Some(Uuid::parse_str(value.trim()).map_err(|_| AppError::InvalidFrontmatter("invalid id".into()))?); } if let Some(value) = line.strip_prefix("created_at:") { created_at = Some(DateTime::parse_from_rfc3339(value.trim()).map_err(|_| AppError::InvalidFrontmatter("invalid created_at".into()))?.with_timezone(&Utc)); } }
     Ok((id.ok_or_else(|| AppError::InvalidFrontmatter("missing id".into()))?, created_at.ok_or_else(|| AppError::InvalidFrontmatter("missing created_at".into()))?, body.to_owned()))
 }
-fn atomic_write(target: &Path, bytes: &[u8]) -> io::Result<()> { let parent = target.parent().ok_or_else(|| io::Error::other("no parent"))?; let temp = parent.join(format!(".{}.{}.tmp", target.file_name().and_then(|x| x.to_str()).unwrap_or("entry"), Uuid::new_v4())); let mut file = fs::File::create(&temp)?; file.write_all(bytes)?; file.sync_all()?; fs::rename(temp, target) }
-fn sanitize_title(input: &str) -> Result<String, AppError> { let title = input.trim().replace(['/', '\\', ':'], "-"); if title.is_empty() || title == "." || title == ".." { Err(AppError::InvalidTitle("title is required".into())) } else { Ok(title.chars().take(120).collect()) } }
 const EXCERPT_CHARS: usize = 220;
 /// Body text without Markdown heading lines, whitespace collapsed, cut at a word boundary.
 fn excerpt_of(content: &str) -> String {
@@ -103,8 +95,6 @@ fn excerpt_of(content: &str) -> String {
     let cut: String = collapsed.chars().take(EXCERPT_CHARS).collect();
     format!("{}…", cut.rsplit_once(' ').map(|(head, _)| head).unwrap_or(&cut))
 }
-fn display_title(path: &Path) -> String { path.file_stem().and_then(|x| x.to_str()).unwrap_or("Untitled").to_owned() }
-fn path_string(path: &Path) -> String { path.to_string_lossy().replace('\\', "/") }
 
 #[cfg(test)]
 mod tests {

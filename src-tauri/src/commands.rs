@@ -15,12 +15,17 @@ pub async fn health_check(state: State<'_, AppState>) -> Result<HealthResponse, 
 // AI/RAG passthroughs. Each forwards a single validated RPC to the Python daemon; React never talks to the daemon directly.
 #[tauri::command] pub async fn ai_search_keyword(query: String, state: State<'_, AppState>) -> Result<serde_json::Value, AppError> { state.sidecar.request("search_keyword", serde_json::json!({"query": query})).await }
 #[tauri::command] pub async fn ai_search_hybrid(query: String, state: State<'_, AppState>) -> Result<serde_json::Value, AppError> { state.sidecar.request("search_hybrid", serde_json::json!({"query": query})).await }
-#[tauri::command] pub async fn ai_chat(query: String, state: State<'_, AppState>) -> Result<serde_json::Value, AppError> { state.sidecar.request("chat", serde_json::json!({"query": query})).await }
+/// One earlier turn of the conversation, so follow-up questions have context. Typed here so only role/content
+/// strings reach the daemon, which validates and trims them again (context.py::recent_history).
+#[derive(serde::Deserialize, serde::Serialize)]
+pub struct ChatTurn { role: String, content: String }
+
+#[tauri::command] pub async fn ai_chat(query: String, history: Option<Vec<ChatTurn>>, state: State<'_, AppState>) -> Result<serde_json::Value, AppError> { state.sidecar.request("chat", serde_json::json!({"query": query, "history": history.unwrap_or_default()})).await }
 /// Streaming chat: answer pieces arrive on `on_delta` as they are generated; the return value is the
 /// complete, citation-validated result (same shape as `ai_chat`).
 #[tauri::command]
-pub async fn ai_chat_stream(query: String, on_delta: tauri::ipc::Channel<String>, state: State<'_, AppState>) -> Result<serde_json::Value, AppError> {
-    state.sidecar.request_streaming("chat", serde_json::json!({"query": query, "stream": true}), |params| {
+pub async fn ai_chat_stream(query: String, history: Option<Vec<ChatTurn>>, on_delta: tauri::ipc::Channel<String>, state: State<'_, AppState>) -> Result<serde_json::Value, AppError> {
+    state.sidecar.request_streaming("chat", serde_json::json!({"query": query, "history": history.unwrap_or_default(), "stream": true}), |params| {
         if let Some(text) = params.get("text").and_then(|t| t.as_str()) { let _ = on_delta.send(text.to_owned()); }
     }).await
 }
@@ -66,3 +71,10 @@ pub async fn list_provider_models(base_url: String, role: Role, api_key: Option<
 
 /// Progress of background embedding, for the sidebar.
 #[tauri::command] pub fn embedding_status(state: State<'_, AppState>) -> crate::embedder::EmbedStatus { state.embedder.status() }
+
+// Saved chats (see chats.rs). The UI owns the document format; these only store files inside the Chats folder.
+#[tauri::command] pub fn list_chats(state: State<'_, AppState>) -> Result<Vec<crate::chats::ChatSummary>, AppError> { state.chats.list() }
+#[tauri::command] pub fn get_chat(path: String, state: State<'_, AppState>) -> Result<String, AppError> { state.chats.get(&path) }
+#[tauri::command] pub fn create_chat(title: String, document: String, state: State<'_, AppState>) -> Result<crate::chats::ChatSummary, AppError> { state.chats.create(&title, &document) }
+#[tauri::command] pub fn save_chat(path: String, document: String, state: State<'_, AppState>) -> Result<crate::chats::ChatSummary, AppError> { state.chats.save(&path, &document) }
+#[tauri::command] pub fn delete_chat(path: String, state: State<'_, AppState>) -> Result<(), AppError> { state.chats.delete(&path) }
