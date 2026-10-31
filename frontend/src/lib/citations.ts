@@ -1,6 +1,7 @@
 export type AnswerPart = { kind: "text"; text: string } | { kind: "citation"; entryId: string };
 
-const CITATION = /\[entry:([0-9a-fA-F-]{36})\]/g;
+// Mirrors ai_daemon/retrieval/context.py: models sometimes omit the "entry:" prefix.
+const CITATION = /\[(?:entry:\s*)?([0-9a-fA-F-]{36})\]/g;
 
 /** Split an answer into text and citation parts. Only ids in `valid` (validated by the backend) become citations; others stay as plain text. */
 export function splitAnswer(answer: string, valid: ReadonlySet<string>): AnswerPart[] {

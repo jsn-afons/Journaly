@@ -15,7 +15,7 @@ Citations are validated, not trusted: the model is asked to cite `[entry:<uuid>]
 
 `ai_daemon/retrieval/service.py::RetrievalService` orchestrates all of the above and is what the RPC layer calls into. It also produces the full diagnostic object (`fts_results`, `vector_results`, `rrf_results`, `temporal_scores`, `final_results`, `latencies`) that a future AI Inspector UI will render — the backend already returns this on every `search_hybrid`/`chat` call, it just isn't visualized yet.
 
-Embeddings and chat generation both go through `ai_daemon/api/openai.py::OpenAICompatibleProvider`, which implements the provider-independent `EmbeddingProvider`/`LLMProvider` ABCs in `ai_daemon/api/base.py`. If credentials or network access are absent, indexing still succeeds with `pending_embedding=true`, `search_keyword`/`search_hybrid` still work (FTS5-only), and `search_semantic`/`chat` return a structured, retryable error rather than crashing or hallucinating from empty context. API keys are read only from the `JOURNALY_OPENAI_API_KEY` process environment variable and are never written to the database or logs.
+Embeddings and chat generation both go through `ai_daemon/api/openai.py::OpenAICompatibleProvider`, which implements the provider-independent `EmbeddingProvider`/`LLMProvider` ABCs in `ai_daemon/api/base.py`. If credentials or network access are absent, indexing still succeeds with `pending_embedding=true`, `search_keyword`/`search_hybrid` still work (FTS5-only), and `search_semantic`/`chat` return a structured, retryable error rather than crashing or hallucinating from empty context. API keys are read only from process environment variables (see `docs/providers.md`) and are never written to the database or logs.
 
 ## RPC operations
 
@@ -23,7 +23,7 @@ Embeddings and chat generation both go through `ai_daemon/api/openai.py::OpenAIC
 - `search_semantic`: vector-only search; returns `VECTOR_INDEX_UNAVAILABLE` or `EMBEDDING_PROVIDER_UNAVAILABLE` (retryable) if unavailable.
 - `search_hybrid`: FTS + vector → RRF → temporal rerank, with the full diagnostic object.
 - `chat`: hybrid retrieval → context assembly → LLM generation → citation validation. Returns `NO_CONTEXT_AVAILABLE` if nothing relevant is indexed, or `LLM_PROVIDER_UNAVAILABLE` (retryable) if generation fails.
-- `retry_embeddings`: bounded retry of pending chunks into `docs_vec`; it never changes Markdown or removes FTS records.
+- `retry_embeddings`: embeds one bounded batch of pending chunks into `docs_vec`; returns `status` (`complete` only when nothing is pending), `completed`, `pending_entries`, and `error` on failure. Never changes Markdown or removes FTS records. Called automatically by the background embedder.
 - `index_file` and `rebuild_index`: recreate the derived index from Markdown.
 
 ## sqlite-vec compatibility note
@@ -36,9 +36,21 @@ FTS5 query note: FTS5's *query parser* (not its tokenizer) treats punctuation li
 
 FTS5 tokenizer note: `docs_fts` is created with `tokenize='porter unicode61'`. The default `unicode61` tokenizer does no stemming, so a query for `restaurant` would not match journal text containing only `restaurants` — the RAG eval harness (below) caught this directly (recall was 0.78, below the 0.8 threshold, entirely because of a singular/plural mismatch). Porter stemming is built into SQLite core (not an extension), works identically on the extension-capable and fallback runtimes, and fixed the eval failure outright. Because `docs_fts` is created `IF NOT EXISTS`, this only applies going forward — an existing on-disk `journal_index.db` created before this change keeps its old tokenizer until `rebuild_index` recreates the database from scratch (nothing production has shipped yet, so no migration path was built for this).
 
-## Streaming (deliberate deviation, not yet implemented)
+## Background embedding
 
-AGENT.md sec.30/36 call for streaming chat responses. This backend pass implements `chat` as a single non-streaming JSON-RPC response, because there's no frontend consumer yet to stream *to* — line-delimited JSON-RPC over stdio could support streaming via partial-result notifications, but building that without a UI to verify it against risked getting the framing wrong. This should be revisited when `Chat.tsx` is built (see "What's left" below).
+`src-tauri/src/embedder.rs` runs one background task that calls `retry_embeddings` in batches (32 chunks each, up to 100 batches per run, 250 ms apart so chat/search can interleave). It runs at startup, after the watcher re-indexes changed files, and after provider settings are saved. On failure it backs off exponentially from 1 minute to 30 minutes; file changes do not cut a backoff short (settings changes do). Its status (`starting`, `working`, `up_to_date`, `waiting`, `unavailable`, with pending count, last error and time to next retry) is exposed by the `embedding_status` command and shown in the sidebar.
+
+`retry_embeddings` now returns `status: "complete"` only when no entry is pending, plus `pending_entries` and an `error` string on failure. Previously it returned "complete" after any successful batch, so callers stopped after the first 32 chunks (bug found while building this; regression test in `test_indexer.py`).
+
+## Streaming
+
+`chat` accepts `"stream": true`. The daemon then writes JSON-RPC **notifications** (no `id`) of the form `{"method": "chat_delta", "params": {"request_id": <id>, "text": "..."}}` as the provider produces text, followed by the normal final response (full answer, validated citations, diagnostics). Citations are validated only on the complete answer, never on fragments.
+
+- Provider: `OpenAICompatibleProvider.generate_stream` reads server-sent events (`stream: true`); a server that ignores the flag and returns plain JSON is handled as a single piece. `LLMProvider.generate_stream` has a default that yields the non-streaming answer once, so any future provider works without extra code.
+- Rust: `SidecarClient::request_streaming` forwards notifications to a callback; the `ai_chat_stream` command passes them to the UI over a Tauri `Channel`. The timeout applies per line, so long answers that keep streaming are not cut off. After any transport failure the daemon process is restarted so a late reply can't be mistaken for the next request's.
+- UI: text appears as it arrives (raw citation ids shown as "[source]"), then is replaced by the final answer with citation chips.
+- Tests: SSE parsing (`test_provider.py`), streaming service path (`test_chat.py`), the real daemon process against a mock streaming server (`test_rpc_streaming.py`), and the Rust client against a fake daemon (`sidecar.rs` tests).
+- Limitation: the daemon handles one request at a time, so background indexing waits while an answer streams.
 
 ## RAG evaluation
 
@@ -52,4 +64,4 @@ Nothing — the backend RAG pipeline (embeddings, hybrid search, temporal rerank
 
 ## Explicitly out of scope for this pass (next pass, per the approved plan)
 
-Streaming chat (the Search/Chat/Citation/Inspector UI was built afterwards in Phase 5 — see `docs/progress.md`); an Anthropic provider (the `LLMProvider`/`EmbeddingProvider` abstraction in `ai_daemon/api/base.py` was built so this only requires a new `ai_daemon/api/anthropic.py`, no retrieval/indexing changes); macOS Keychain integration (API key currently comes from `JOURNALY_OPENAI_API_KEY` env var only); database corruption recovery (integrity check + rename-and-rebuild on startup); concurrent-edit conflict UI (the Rust layer already detects the conflict via `expected_content`, per `commands.rs::save_entry`, but there's no UI to resolve it).
+(Streaming chat and the Search/Chat/Citation/Inspector UI were built afterwards — see `docs/progress.md`.) an Anthropic provider (the `LLMProvider`/`EmbeddingProvider` abstraction in `ai_daemon/api/base.py` was built so this only requires a new `ai_daemon/api/anthropic.py`, no retrieval/indexing changes); (Keychain storage for API keys has since been built — see `docs/providers.md`.) database corruption recovery (integrity check + rename-and-rebuild on startup); concurrent-edit conflict UI (the Rust layer already detects the conflict via `expected_content`, per `commands.rs::save_entry`, but there's no UI to resolve it).

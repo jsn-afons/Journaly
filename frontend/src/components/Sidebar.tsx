@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { EntrySummary } from "../lib/rpc";
 import type { RetrievalDiagnostics } from "../types/ai";
+import { EmbeddingStatus } from "./EmbeddingStatus";
 import { Search } from "./Search";
 
 interface Props {
@@ -15,5 +16,6 @@ export function Sidebar({ entries, activePath, status, onOpen, onCreate, onDiagn
     <Search onOpen={onOpen} onActive={setSearching} onDiagnostics={onDiagnostics} />
     {!searching && <nav>{entries.map((item) => <button className={activePath === item.path ? "entry active" : "entry"} key={item.path} onClick={() => onOpen(item.path)}><span>{item.title}</span><small>{new Date(item.created_at).toLocaleDateString()}</small></button>)}</nav>}
     <section aria-live="polite" className={`status ${status.kind}`}>{status.text}</section>
+    <EmbeddingStatus />
   </aside>;
 }

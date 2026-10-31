@@ -11,3 +11,4 @@ __pycache__/
 *.db
 .env
 .DS_Store
+journaly.config.json

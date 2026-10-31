@@ -1,0 +1,8 @@
+{
+  "chat_base_url": "http://localhost:11434/v1",
+  "chat_model": "qwen3.5:4b",
+  "embedding_base_url": "http://localhost:11434/v1",
+  "embedding_model": "nomic-embed-text",
+  "embedding_dimensions": 768,
+  "provider_timeout_seconds": 180
+}

@@ -1,10 +1,10 @@
 use std::{collections::HashSet, path::{Path, PathBuf}, sync::mpsc, thread, time::Duration};
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use tracing::{error, info, warn};
-use crate::sidecar::SidecarClient;
+use crate::{embedder::Embedder, sidecar::SidecarClient};
 
 /// Rust owns filesystem watching; the daemon only receives validated journal-relative paths.
-pub fn start(journal_root: PathBuf, sidecar: SidecarClient) {
+pub fn start(journal_root: PathBuf, sidecar: SidecarClient, embedder: Embedder) {
     thread::spawn(move || {
         let (sender, receiver) = mpsc::channel();
         let mut watcher = match RecommendedWatcher::new(sender, Config::default()) { Ok(watcher) => watcher, Err(error) => { error!(%error, "journal watcher failed to start"); return; } };
@@ -15,6 +15,8 @@ pub fn start(journal_root: PathBuf, sidecar: SidecarClient) {
             let mut paths = paths_for(event, &journal_root);
             while let Ok(next) = receiver.recv_timeout(Duration::from_millis(1500)) { match next { Ok(event) => paths.extend(paths_for(event, &journal_root)), Err(error) => warn!(%error, "journal watcher error") } }
             for path in paths { let client = sidecar.clone(); let exists = journal_root.join(&path).exists(); tauri::async_runtime::block_on(async move { let result = if Path::new(&path).extension().is_none_or(|ext| !ext.eq_ignore_ascii_case("md")) { Ok(serde_json::Value::Null) } else if exists { client.index_file(&path).await } else { client.remove_file(&path).await }; if let Err(error) = result { warn!(%error, %path, "background journal indexing failed"); } }); }
+            // Newly indexed text is marked pending; let the embedder pick it up (no-op if nothing is pending).
+            embedder.wake_for_changes();
         }
     });
 }

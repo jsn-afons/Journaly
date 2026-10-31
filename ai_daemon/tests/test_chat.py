@@ -56,6 +56,15 @@ class ChatTests(unittest.TestCase):
         result = asyncio.run(service.chat("What have I thought about restaurants?"))
         self.assertTrue(result["diagnostics"]["final_results"])
 
+    def test_chat_streams_pieces_and_validates_citations_on_full_answer(self):
+        entry_id = self._entry_id()
+        provider = StubLLMProvider(f"Restaurant [entry:{entry_id}] fake [entry:00000000-0000-0000-0000-000000000000]")
+        service = RetrievalService(self.database, provider, provider)
+        pieces: list[str] = []
+        result = asyncio.run(service.chat("restaurant", pieces.append))
+        self.assertEqual("".join(pieces), result["answer"])
+        self.assertEqual(result["citations"], [entry_id])
+
     def test_chat_reports_structured_error_when_llm_unavailable(self):
         provider = StubLLMProvider(answer=None)
         service = RetrievalService(self.database, provider, provider)

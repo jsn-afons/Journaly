@@ -53,3 +53,12 @@ class CitationValidationTests(unittest.TestCase):
         entry_b = "b" * 8 + "-0000-0000-0000-000000000000"
         answer = f"[entry:{entry_a}] and again [entry:{entry_a}] then [entry:{entry_b}]"
         self.assertEqual(extract_valid_citations(answer, known), [entry_a, entry_b])
+
+
+class LooseCitationFormatTests(unittest.TestCase):
+    ID = "550e8400-e29b-41d4-a716-446655440000"
+    FAKE = "11111111-1111-1111-1111-111111111111"
+
+    def test_accepts_bare_uuid_but_still_drops_unretrieved_ids(self):
+        answer = f"A [{self.ID}] and B [entry: {self.ID}] and fake [{self.FAKE}]."
+        self.assertEqual(extract_valid_citations(answer, {self.ID}), [self.ID])

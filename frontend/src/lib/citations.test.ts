@@ -9,6 +9,9 @@ describe("splitAnswer", () => {
     expect(splitAnswer(`Yes [entry:${ID}] indeed`, new Set([ID]))).toEqual([
       { kind: "text", text: "Yes " }, { kind: "citation", entryId: ID }, { kind: "text", text: " indeed" }]);
   });
+  it("accepts ids written without the entry: prefix", () => {
+    expect(splitAnswer(`See [${ID}].`, new Set([ID])).map((p) => p.kind)).toEqual(["text", "citation", "text"]);
+  });
   it("leaves fabricated ids as plain text", () => {
     const parts = splitAnswer(`x [entry:${FAKE}]`, new Set([ID]));
     expect(parts.every((p) => p.kind === "text")).toBe(true);

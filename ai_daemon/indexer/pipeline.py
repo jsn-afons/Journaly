@@ -40,13 +40,18 @@ class JournalIndexer:
         with self.database.connection() as connection:
             return fts_search(connection, query)
     async def retry_embeddings(self, limit: int = 32) -> dict[str, int | str]:
+        """Embed one bounded batch of pending chunks. `status` is "complete" only when nothing is left pending,
+        so callers can loop while `status == "pending"` and `completed > 0`. `error` explains a failed batch."""
         with self.database.connection() as connection:
-            if not self.database.vector_ready(connection): return {"status": "unavailable", "retried": 0, "completed": 0}
-            rows = connection.execute("SELECT c.id, c.raw_content FROM chunks c JOIN journal_entries e ON e.id=c.entry_id WHERE e.pending_embedding = 1 ORDER BY e.modified_at LIMIT ?", (limit,)).fetchall()
-        if not rows: return {"status": "complete", "retried": 0, "completed": 0}
+            if not self.database.vector_ready(connection): return {"status": "unavailable", "retried": 0, "completed": 0, "pending_entries": self._pending_entries(connection), "error": "Semantic search needs the sqlite-vec extension, which this Python runtime cannot load"}
+            rows = connection.execute("SELECT c.id, c.raw_content FROM chunks c JOIN journal_entries e ON e.id=c.entry_id LEFT JOIN docs_vec v ON v.chunk_id=c.id WHERE e.pending_embedding = 1 AND v.chunk_id IS NULL ORDER BY e.modified_at, c.id LIMIT ?", (limit,)).fetchall()
+            if not rows:
+                # Entries flagged pending whose chunks are all embedded (or that have no chunks) are done.
+                connection.execute("UPDATE journal_entries SET pending_embedding=0 WHERE pending_embedding=1")
+                return {"status": "complete", "retried": 0, "completed": 0, "pending_entries": 0}
         try: vectors = await self.embedding_provider.generate_embeddings([row["raw_content"] for row in rows])
-        except ProviderUnavailable: return {"status": "pending", "retried": len(rows), "completed": 0}
-        if len(vectors) != len(rows) or any(len(vector) != self.dimensions for vector in vectors): return {"status": "pending", "retried": len(rows), "completed": 0}
+        except ProviderUnavailable as error: return self._failed(len(rows), str(error))
+        if len(vectors) != len(rows) or any(len(vector) != self.dimensions for vector in vectors): return self._failed(len(rows), "Embedding provider returned vectors of an unexpected size")
         with self.database.connection() as connection:
             for row, vector in zip(rows, vectors):
                 connection.execute("DELETE FROM docs_vec WHERE chunk_id = ?", (row["id"],))
@@ -55,7 +60,14 @@ class JournalIndexer:
             for entry_id in entry_ids:
                 remaining = connection.execute("SELECT COUNT(*) FROM chunks c LEFT JOIN docs_vec v ON v.chunk_id=c.id WHERE c.entry_id=? AND v.chunk_id IS NULL", (entry_id,)).fetchone()[0]
                 if remaining == 0: connection.execute("UPDATE journal_entries SET pending_embedding=0 WHERE id=?", (entry_id,))
-        return {"status": "complete", "retried": len(rows), "completed": len(rows)}
+            pending = self._pending_entries(connection)
+        return {"status": "complete" if pending == 0 else "pending", "retried": len(rows), "completed": len(rows), "pending_entries": pending}
+    def _failed(self, retried: int, error: str) -> dict[str, int | str]:
+        with self.database.connection() as connection:
+            return {"status": "pending", "retried": retried, "completed": 0, "pending_entries": self._pending_entries(connection), "error": error}
+    @staticmethod
+    def _pending_entries(connection) -> int:
+        return connection.execute("SELECT COUNT(*) FROM journal_entries WHERE pending_embedding = 1").fetchone()[0]
     def remove_file(self, relative_path: str) -> dict[str, object]:
         with self.database.connection() as connection:
             row = connection.execute("SELECT id FROM journal_entries WHERE filepath = ?", (relative_path,)).fetchone()

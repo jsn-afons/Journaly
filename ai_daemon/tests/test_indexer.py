@@ -30,7 +30,8 @@ class IndexerTests(unittest.TestCase):
         self.indexer.index_file("2026/08/Ideas.md")
         with patch.object(JournalDatabase, "_load_vector_extension", return_value=False):
             result = asyncio.run(self.indexer.retry_embeddings())
-        self.assertEqual(result, {"status": "unavailable", "retried": 0, "completed": 0})
+        self.assertEqual((result["status"], result["retried"], result["completed"], result["pending_entries"]), ("unavailable", 0, 0, 1))
+        self.assertIn("sqlite-vec", result["error"])
         self.assertEqual(len(self.indexer.search_keyword("thought")), 1, "FTS5 must keep working when vector search is unavailable")
     @unittest.skipUnless(vector_extension_available(), "requires an extension-capable Python (see ai_daemon/.runtime)")
     def test_retry_embeddings_preserves_index_when_provider_unavailable_then_completes(self):
@@ -53,3 +54,23 @@ class IndexerTests(unittest.TestCase):
         with resized.connection() as connection:
             self.assertEqual(connection.execute("SELECT pending_embedding FROM journal_entries").fetchone()[0], 1)
             self.assertEqual(connection.execute("SELECT COUNT(*) FROM docs_fts").fetchone()[0], 1, "reindexing derived vector storage must not touch FTS5/Markdown")
+    @unittest.skipUnless(vector_extension_available(), "requires an extension-capable Python (see ai_daemon/.runtime)")
+    def test_retry_reports_pending_until_every_batch_is_done(self):
+        # Regression: a batch used to report "complete" even with more chunks waiting, so callers stopped early.
+        for number in range(3):
+            (self.root / f"2026/08/Entry {number}.md").write_text("\n\n".join(f"# Heading {i}\nThought {i}." for i in range(3)))
+        database = JournalDatabase(self.indexer.database.path, embedding_dimensions=2)
+        indexer = JournalIndexer(self.root, database, MockEmbeddingProvider(), dimensions=2)
+        indexer.rebuild()
+        first = asyncio.run(indexer.retry_embeddings(limit=4))
+        self.assertEqual((first["status"], first["completed"]), ("pending", 4)); self.assertGreater(first["pending_entries"], 0)
+        statuses = [asyncio.run(indexer.retry_embeddings(limit=4))["status"] for _ in range(5)]
+        self.assertEqual(statuses[-1], "complete")
+        with database.connection() as connection:
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM docs_vec").fetchone()[0], connection.execute("SELECT COUNT(*) FROM chunks").fetchone()[0])
+    @unittest.skipUnless(vector_extension_available(), "requires an extension-capable Python (see ai_daemon/.runtime)")
+    def test_failed_batch_reports_reason(self):
+        (self.root / "2026/08/Ideas.md").write_text("A journal thought")
+        self.indexer.index_file("2026/08/Ideas.md")
+        result = asyncio.run(self.indexer.retry_embeddings())
+        self.assertEqual((result["status"], result["completed"], result["pending_entries"]), ("pending", 0, 1)); self.assertTrue(result["error"])

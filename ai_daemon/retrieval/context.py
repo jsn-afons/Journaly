@@ -29,7 +29,9 @@ SYSTEM_INSTRUCTIONS = (
     "your own inference — do not present unsupported inference as fact."
 )
 
-CITATION_PATTERN = re.compile(r"\[entry:([0-9a-fA-F-]{36})\]")
+# Small local models often drop the "entry:" prefix, so accept [uuid] too. Safety is unchanged: only ids that were
+# actually retrieved survive extract_valid_citations, so a loose pattern cannot introduce fabricated citations.
+CITATION_PATTERN = re.compile(r"\[(?:entry:\s*)?([0-9a-fA-F-]{36})\]")
 
 
 def _escape_attr(value: str) -> str:

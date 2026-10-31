@@ -12,6 +12,10 @@ pub enum AppError {
     InvalidTitle(String),
     #[error("the file changed on disk before local edits were saved")]
     Conflict,
+    #[error("invalid settings: {0}")]
+    InvalidSettings(String),
+    #[error("Keychain error: {0}")]
+    Keychain(String),
     #[error("AI sidecar is unavailable: {0}")]
     SidecarUnavailable(String),
     #[error("AI sidecar returned an invalid response: {0}")]
@@ -30,6 +34,8 @@ impl serde::Serialize for AppError {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
         let wire = match self {
             AppError::Rpc { code, message, retryable } => WireError { code: code.clone(), message: message.clone(), retryable: *retryable },
+            AppError::InvalidSettings(_) => WireError { code: "INVALID_SETTINGS".into(), message: self.to_string(), retryable: false },
+            AppError::Keychain(_) => WireError { code: "KEYCHAIN_ERROR".into(), message: self.to_string(), retryable: false },
             AppError::Conflict => WireError { code: "CONFLICT".into(), message: self.to_string(), retryable: false },
             AppError::SidecarUnavailable(_) => WireError { code: "SIDECAR_UNAVAILABLE".into(), message: self.to_string(), retryable: true },
             other => WireError { code: "JOURNAL_ERROR".into(), message: other.to_string(), retryable: false },

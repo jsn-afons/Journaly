@@ -6,6 +6,7 @@ produces the diagnostic object the AI Inspector will render (AGENT.md sec.24, 43
 """
 from __future__ import annotations
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 from ai_daemon.api.base import EmbeddingProvider, LLMProvider, ProviderUnavailable
@@ -106,7 +107,8 @@ class RetrievalService:
     async def search_hybrid(self, query: str) -> dict[str, object]:
         return await self._retrieve_hybrid(query)
 
-    async def chat(self, query: str) -> dict[str, object]:
+    async def chat(self, query: str, on_delta: Callable[[str], None] | None = None) -> dict[str, object]:
+        """With `on_delta`, the answer is streamed piece by piece; citations are still validated on the complete answer."""
         diagnostics = await self._retrieve_hybrid(query)
         top_chunks = diagnostics["final_results"]
         if not top_chunks:
@@ -115,7 +117,13 @@ class RetrievalService:
         messages = build_messages(query, context_xml)
         started = time.monotonic()
         try:
-            answer = await self.llm_provider.generate(messages)
+            if on_delta is None:
+                answer = await self.llm_provider.generate(messages)
+            else:
+                pieces: list[str] = []
+                async for piece in self.llm_provider.generate_stream(messages):
+                    pieces.append(piece); on_delta(piece)
+                answer = "".join(pieces)
         except ProviderUnavailable as error:
             raise RetrievalUnavailable("LLM_PROVIDER_UNAVAILABLE", str(error), retryable=True) from error
         diagnostics["latencies"]["llm_seconds"] = time.monotonic() - started

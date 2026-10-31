@@ -1,0 +1,782 @@
+<!doctype html>
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Anastasia's Journal - macOS Note App</title>
+    <!-- Tailwind CSS CDN with forms and container queries -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <!-- FontAwesome Icons for clean macOS vector glyphs -->
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+      rel="stylesheet"
+    />
+    <!-- Tailwind Configuration for custom colors and fonts -->
+    <script data-purpose="tailwind-config">
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: [
+                "-apple-system",
+                "BlinkMacSystemFont",
+                '"SF Pro Display"',
+                '"SF Pro Text"',
+                "Inter",
+                "system-ui",
+                "sans-serif",
+              ],
+            },
+            colors: {
+              macBg: "#F5F5F7",
+              macSidebar: "#FAF9F8",
+              macBorder: "#E6E5E3",
+              pinkCard: "#FDF2F4",
+              pinkBorder: "#F9DCE1",
+              blueCard: "#EEF2FF",
+              blueBorder: "#DEE4FB",
+              grayCard: "#F8F9FA",
+              grayBorder: "#E9EBF0",
+              greenCard: "#EDF7EE",
+              greenBorder: "#DAEDDC",
+            },
+          },
+        },
+      };
+    </script>
+    <!-- Custom Styles for Scrollbars and Apple System Details -->
+    <style data-purpose="custom-layout">
+      /* Custom subtle scrollbars */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: rgba(0, 0, 0, 0.12);
+        border-radius: 9999px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: rgba(0, 0, 0, 0.22);
+      }
+
+      .desktop-bg {
+        background: radial-gradient(
+          circle at 20% 20%,
+          #e0e7ff 0%,
+          #fdf2f8 35%,
+          #f0fdf4 70%,
+          #fef3c7 100%
+        );
+      }
+
+      .mac-window-shadow {
+        box-shadow:
+          0 25px 65px -12px rgba(0, 0, 0, 0.25),
+          0 0 0 1px rgba(0, 0, 0, 0.08);
+      }
+    </style>
+  </head>
+  <body
+    class="desktop-bg min-h-screen p-2 md:p-8 flex items-center justify-center font-sans text-neutral-800 antialiased selection:bg-rose-200"
+  >
+    <!-- BEGIN: MacOSAppWindow -->
+    <main
+      class="w-full max-w-[1400px] h-[92vh] min-h-[720px] bg-white rounded-2xl mac-window-shadow flex overflow-hidden border border-neutral-200/80"
+      data-purpose="macos-window"
+    >
+      <!-- BEGIN: LeftSidebar -->
+      <aside
+        class="w-64 bg-[#FAF9F8] border-r border-[#EFECE8] flex flex-col justify-between select-none shrink-0 transition-all duration-300"
+        data-purpose="sidebar-navigation"
+      >
+        <!-- Top Section: Window Controls & Profile -->
+        <div>
+          <!-- macOS Window Traffic Lights -->
+          <div
+            class="h-11 px-4 flex items-center gap-2 pt-1"
+            data-purpose="traffic-lights"
+          >
+            <div
+              class="w-3 h-3 rounded-full bg-[#FF5F56] border border-[#E0443E]/60 flex items-center justify-center group cursor-pointer"
+            >
+              <span
+                class="text-[8px] text-[#5c0000] opacity-0 group-hover:opacity-100 font-bold leading-none"
+                >×</span
+              >
+            </div>
+            <div
+              class="w-3 h-3 rounded-full bg-[#FFBD2E] border border-[#DEA123]/60 flex items-center justify-center group cursor-pointer"
+            >
+              <span
+                class="text-[8px] text-[#523c00] opacity-0 group-hover:opacity-100 font-bold leading-none"
+                >-</span
+              >
+            </div>
+            <div
+              class="w-3 h-3 rounded-full bg-[#27C93F] border border-[#1AAB29]/60 flex items-center justify-center group cursor-pointer"
+            >
+              <span
+                class="text-[7px] text-[#004d11] opacity-0 group-hover:opacity-100 font-bold leading-none"
+                >+</span
+              >
+            </div>
+            <button
+              class="ml-4 text-neutral-400 hover:text-neutral-600 transition-colors"
+              title="Toggle Sidebar"
+            >
+              <i class="fa-regular fa-window-maximize text-xs rotate-90"></i>
+            </button>
+          </div>
+          <!-- User Profile Badge -->
+          <div
+            class="px-4 py-3 mx-2 mt-1 mb-2 flex items-center gap-3 rounded-xl hover:bg-neutral-200/40 transition-colors cursor-pointer"
+            data-purpose="user-badge"
+          >
+            <div
+              class="w-9 h-9 rounded-full bg-slate-100 border border-neutral-200 flex items-center justify-center text-xl shadow-xs"
+            >
+              🐼
+            </div>
+            <div class="overflow-hidden">
+              <h2 class="text-xs font-semibold text-neutral-900 leading-tight">
+                Anastasia
+              </h2>
+              <p class="text-[11px] text-neutral-400 truncate">
+                anastasia@icylab.co
+              </p>
+            </div>
+          </div>
+          <!-- Navigation Section: MAIN -->
+          <div class="px-3 py-1">
+            <p
+              class="px-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-wider mb-1"
+            >
+              MAIN
+            </p>
+            <nav class="space-y-0.5 text-xs font-medium text-neutral-700">
+              <button
+                class="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-neutral-200/70 text-neutral-900 font-semibold shadow-2xs"
+                id="nav-all-notes"
+                onclick="switchView('grid')"
+              >
+                <i class="fa-solid fa-pen-nib text-xs w-4 text-neutral-800"></i>
+                <span>All notes</span>
+              </button>
+              <button
+                class="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg hover:bg-neutral-200/50 text-neutral-600 hover:text-neutral-900 transition-colors"
+              >
+                <i class="fa-regular fa-bookmark text-xs w-4"></i>
+                <span>Favorites</span>
+              </button>
+              <button
+                class="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg hover:bg-neutral-200/50 text-neutral-600 hover:text-neutral-900 transition-colors"
+              >
+                <i class="fa-regular fa-clock text-xs w-4"></i>
+                <span>Recent notes</span>
+              </button>
+              <button
+                class="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg hover:bg-neutral-200/50 text-neutral-600 hover:text-neutral-900 transition-colors"
+              >
+                <i class="fa-regular fa-tag text-xs w-4"></i>
+                <span>Tags</span>
+              </button>
+            </nav>
+          </div>
+          <!-- Navigation Section: ORDER -->
+          <div class="px-3 py-3">
+            <p
+              class="px-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-wider mb-1"
+            >
+              ORDER
+            </p>
+            <nav class="space-y-0.5 text-xs font-medium text-neutral-700">
+              <button
+                class="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg hover:bg-neutral-200/50 text-neutral-600 hover:text-neutral-900 transition-colors"
+              >
+                <i class="fa-regular fa-folder text-xs w-4"></i>
+                <span>Notebooks</span>
+              </button>
+              <button
+                class="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg hover:bg-neutral-200/50 text-neutral-600 hover:text-neutral-900 transition-colors"
+              >
+                <i class="fa-solid fa-border-all text-xs w-4"></i>
+                <span>Projects</span>
+              </button>
+              <button
+                class="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg hover:bg-neutral-200/50 text-neutral-600 hover:text-neutral-900 transition-colors"
+              >
+                <i class="fa-solid fa-share-nodes text-xs w-4"></i>
+                <span>Shared</span>
+              </button>
+            </nav>
+          </div>
+        </div>
+        <!-- Bottom Section: SETTINGS -->
+        <div class="p-3 border-t border-[#EFECE8]" data-purpose="settings-menu">
+          <p
+            class="px-3 text-[10px] font-semibold text-neutral-400 uppercase tracking-wider mb-1"
+          >
+            SETTINGS
+          </p>
+          <nav class="space-y-0.5 text-xs font-medium text-neutral-600">
+            <button
+              class="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg hover:bg-neutral-200/50 hover:text-neutral-900 transition-colors"
+            >
+              <i class="fa-solid fa-gear text-xs w-4"></i>
+              <span>Settings</span>
+            </button>
+            <button
+              class="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg hover:bg-neutral-200/50 hover:text-neutral-900 transition-colors"
+            >
+              <i class="fa-solid fa-arrows-rotate text-xs w-4"></i>
+              <span>Sync Status</span>
+              <span
+                class="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-500"
+              ></span>
+            </button>
+          </nav>
+        </div>
+      </aside>
+      <!-- END: LeftSidebar -->
+      <!-- BEGIN: CenterWorkspaceArea -->
+      <div
+        class="flex-1 flex flex-col min-w-0 bg-[#FFFFFF] overflow-hidden"
+        data-purpose="workspace-main"
+      >
+        <!-- Top Application Header Bar -->
+        <header
+          class="h-16 border-b border-neutral-100 px-6 flex items-center justify-between gap-4 select-none shrink-0 bg-white/80 backdrop-blur-md"
+          data-purpose="app-header"
+        >
+          <!-- Breadcrumb navigation -->
+          <div class="flex items-center gap-2 text-neutral-800 shrink-0">
+            <button
+              class="text-neutral-400 hover:text-neutral-700 transition-colors text-xs flex items-center gap-1 font-medium"
+            >
+              <i class="fa-solid fa-chevron-left text-[10px]"></i>
+              <span>Home</span>
+            </button>
+            <span class="text-neutral-300">/</span>
+            <h1 class="text-sm font-semibold tracking-tight text-neutral-900">
+              All notes
+            </h1>
+          </div>
+          <!-- Pill Search Bar -->
+          <div class="max-w-md w-full relative">
+            <i
+              class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400 text-xs"
+            ></i>
+            <input
+              class="w-full bg-[#F4F4F6] border-none text-xs rounded-xl pl-9 pr-4 py-2 text-neutral-800 placeholder-neutral-400 focus:ring-2 focus:ring-neutral-300 transition-all focus:bg-white"
+              placeholder="Search a note"
+              type="text"
+            />
+          </div>
+          <!-- Right Header Action Controls -->
+          <div class="flex items-center gap-2 shrink-0">
+            <!-- Filter Button -->
+            <button
+              class="h-8 px-3 rounded-lg border border-neutral-200/80 bg-white hover:bg-neutral-50 text-neutral-600 text-xs font-medium flex items-center gap-1.5 shadow-2xs transition-colors"
+            >
+              <i
+                class="fa-solid fa-arrow-down-wide-short text-xs text-neutral-400"
+              ></i>
+              <span>Filtres</span>
+            </button>
+            <!-- Grid/List Switcher Group -->
+            <div
+              class="flex items-center p-0.5 rounded-lg border border-neutral-200/80 bg-neutral-50"
+            >
+              <button
+                class="w-7 h-7 rounded-md flex items-center justify-center text-neutral-500 hover:text-neutral-800 text-xs"
+                id="btn-list-view"
+                onclick="switchView('markdown')"
+                title="Markdown Editor View"
+              >
+                <i class="fa-solid fa-bars"></i>
+              </button>
+              <button
+                class="w-7 h-7 rounded-md bg-white shadow-xs text-neutral-800 flex items-center justify-center text-xs"
+                id="btn-grid-view"
+                onclick="switchView('grid')"
+                title="Grid Note View"
+              >
+                <i class="fa-solid fa-table-cells-large"></i>
+              </button>
+            </div>
+            <!-- AI Assistant Toggle Button -->
+            <button
+              class="h-8 px-3 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-medium flex items-center gap-1.5 shadow-xs transition-colors"
+              onclick="toggleAiDrawer()"
+            >
+              <i class="fa-solid fa-sparkles text-amber-300 text-xs"></i>
+              <span>AI Copilot</span>
+            </button>
+          </div>
+        </header>
+        <!-- View 1: Card Grid Workspace View (Active default) -->
+        <section
+          class="flex-1 p-6 overflow-y-auto bg-white"
+          data-purpose="note-card-grid"
+          id="grid-view-container"
+        >
+          <!-- 2 Column Responsive Grid matching IMG_7957.JPG -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-5xl mx-auto">
+            <!-- Card 1: Psychology (Pink Theme) -->
+            <article
+              class="bg-pinkCard border border-pinkBorder rounded-3xl p-5 flex flex-col justify-between hover:shadow-md transition-shadow"
+              data-purpose="note-card-psychology"
+            >
+              <!-- Header bar of card -->
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="text-sm font-semibold text-rose-950">Psychology</h3>
+                <div class="flex items-center gap-3 text-neutral-400">
+                  <button class="hover:text-neutral-700 text-sm">
+                    <i class="fa-solid fa-plus"></i>
+                  </button>
+                  <button class="hover:text-neutral-700 text-sm">
+                    <i class="fa-solid fa-ellipsis"></i>
+                  </button>
+                </div>
+              </div>
+              <!-- Inner White Note Sheet -->
+              <div
+                class="bg-white rounded-2xl p-5 shadow-xs border border-rose-100/60 min-h-[240px]"
+              >
+                <!-- Tags -->
+                <div class="flex flex-wrap items-center gap-1.5 mb-3.5">
+                  <span
+                    class="px-2 py-0.5 rounded-md bg-emerald-50 text-[11px] font-medium text-emerald-800"
+                    >Studies 📚</span
+                  >
+                  <span
+                    class="px-2 py-0.5 rounded-md bg-amber-50 text-[11px] font-medium text-amber-800"
+                    >University 🏛️</span
+                  >
+                </div>
+                <!-- Title -->
+                <h4
+                  class="text-lg font-bold text-neutral-900 leading-snug tracking-tight mb-1"
+                >
+                  Introduction to Psychology 👩🏻‍🏫
+                </h4>
+                <p class="text-xs text-neutral-400 font-medium mb-3">
+                  Week 1, lecture notes
+                </p>
+                <!-- Content Preview -->
+                <div
+                  class="text-xs text-neutral-600 leading-relaxed space-y-1.5"
+                >
+                  <p class="font-medium text-neutral-800">
+                    What is Psychology?
+                  </p>
+                  <p class="text-neutral-500">
+                    Psychology is the scientific study of behavior and mental
+                    processes, divided into several 'schools'...
+                  </p>
+                </div>
+              </div>
+            </article>
+            <!-- Card 2: Groceries (Lavender/Blue Theme) -->
+            <article
+              class="bg-blueCard border border-blueBorder rounded-3xl p-5 flex flex-col justify-between hover:shadow-md transition-shadow"
+              data-purpose="note-card-groceries"
+            >
+              <!-- Header bar of card -->
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="text-sm font-semibold text-slate-800">Groceries</h3>
+                <div class="flex items-center gap-3 text-neutral-400">
+                  <button class="hover:text-neutral-700 text-sm">
+                    <i class="fa-solid fa-plus"></i>
+                  </button>
+                  <button class="hover:text-neutral-700 text-sm">
+                    <i class="fa-solid fa-ellipsis"></i>
+                  </button>
+                </div>
+              </div>
+              <!-- Inner White Note Sheet -->
+              <div
+                class="bg-white rounded-2xl p-5 shadow-xs border border-blue-100/60 min-h-[240px]"
+              >
+                <!-- Tags -->
+                <div class="flex flex-wrap items-center gap-1.5 mb-3.5">
+                  <span
+                    class="px-2 py-0.5 rounded-md bg-amber-50 text-[11px] font-medium text-amber-800"
+                    >Food 🍱</span
+                  >
+                </div>
+                <!-- Title -->
+                <h4
+                  class="text-lg font-bold text-neutral-900 leading-snug tracking-tight mb-3"
+                >
+                  Grocery list 🛒
+                </h4>
+                <!-- Content Preview -->
+                <ul class="text-xs text-neutral-600 space-y-1 font-normal">
+                  <li>Milk</li>
+                  <li>Chicken breast</li>
+                  <li>Apple Juice</li>
+                  <li>Cherry tomatoes</li>
+                  <li>Blueberries</li>
+                  <li class="text-neutral-400">Steak...</li>
+                </ul>
+              </div>
+            </article>
+            <!-- Card 3: Thai Chicken (Neutral Off-White Theme) -->
+            <article
+              class="bg-grayCard border border-grayBorder rounded-3xl p-5 flex flex-col justify-between hover:shadow-md transition-shadow"
+              data-purpose="note-card-recipe"
+            >
+              <!-- Header bar of card -->
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="text-sm font-semibold text-neutral-700">
+                  Thai Chicken
+                </h3>
+                <div class="flex items-center gap-3 text-neutral-400">
+                  <button class="hover:text-neutral-700 text-sm">
+                    <i class="fa-solid fa-plus"></i>
+                  </button>
+                  <button class="hover:text-neutral-700 text-sm">
+                    <i class="fa-solid fa-ellipsis"></i>
+                  </button>
+                </div>
+              </div>
+              <!-- Inner White Note Sheet -->
+              <div
+                class="bg-white rounded-2xl p-5 shadow-xs border border-neutral-200/60 min-h-[240px]"
+              >
+                <!-- Tags -->
+                <div class="flex flex-wrap items-center gap-1.5 mb-3.5">
+                  <span
+                    class="px-2 py-0.5 rounded-md bg-amber-50 text-[11px] font-medium text-amber-800"
+                    >Food 🍱</span
+                  >
+                </div>
+                <!-- Title -->
+                <h4
+                  class="text-lg font-bold text-neutral-900 leading-snug tracking-tight mb-3"
+                >
+                  Recipe 🍲
+                </h4>
+                <!-- Content Preview -->
+                <div class="text-xs text-neutral-600 space-y-2">
+                  <p class="font-medium text-neutral-700">Protein:</p>
+                  <p class="text-neutral-500 pl-2">
+                    • 500g (1 lb) ground chicken (or finely chopped chicken
+                    breast/thigh)
+                  </p>
+                  <p class="font-medium text-neutral-700 pt-1">Sauce Mix:</p>
+                  <p class="text-neutral-500 pl-2">• 2 tbsp oyster sauce...</p>
+                </div>
+              </div>
+            </article>
+            <!-- Card 4: Autumn is coming (Mint Green Theme) -->
+            <article
+              class="bg-greenCard border border-greenBorder rounded-3xl p-5 flex flex-col justify-between hover:shadow-md transition-shadow"
+              data-purpose="note-card-autumn"
+            >
+              <!-- Header bar of card -->
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="text-sm font-semibold text-emerald-900">
+                  Autumn is coming
+                </h3>
+                <div class="flex items-center gap-3 text-neutral-400">
+                  <button class="hover:text-neutral-700 text-sm">
+                    <i class="fa-solid fa-plus"></i>
+                  </button>
+                  <button class="hover:text-neutral-700 text-sm">
+                    <i class="fa-solid fa-ellipsis"></i>
+                  </button>
+                </div>
+              </div>
+              <!-- Inner White Note Sheet -->
+              <div
+                class="bg-white rounded-2xl p-5 shadow-xs border border-emerald-100/60 min-h-[240px]"
+              >
+                <!-- Tags -->
+                <div class="flex flex-wrap items-center gap-1.5 mb-3.5">
+                  <span
+                    class="px-2 py-0.5 rounded-md bg-blue-50 text-[11px] font-medium text-blue-800"
+                    >Diary 📖</span
+                  >
+                  <span
+                    class="px-2 py-0.5 rounded-md bg-emerald-50 text-[11px] font-medium text-emerald-800"
+                    >Thoughts 💭</span
+                  >
+                </div>
+                <!-- Title -->
+                <h4
+                  class="text-lg font-bold text-neutral-900 leading-snug tracking-tight mb-3"
+                >
+                  I'm exhausted all over again 🤧
+                </h4>
+                <!-- Content Preview -->
+                <div class="text-xs text-neutral-600 leading-relaxed space-y-2">
+                  <p class="text-neutral-500">
+                    Today feels heavy. My body moves slow, my thoughts even
+                    slower. I just want to curl up, close my eyes, and let the
+                    world fade for a while.
+                  </p>
+                  <p class="text-neutral-400 italic">
+                    I don't wanna go to uni tomorrow...
+                  </p>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+        <!-- View 2: Obsidian-style Markdown Writing View (Hidden initially) -->
+        <section
+          class="hidden flex-1 overflow-y-auto p-12 bg-white max-w-4xl mx-auto w-full"
+          data-purpose="markdown-editor"
+          id="editor-view-container"
+        >
+          <!-- Document breadcrumb / title -->
+          <div
+            class="mb-6 pb-4 border-b border-neutral-100 flex items-center justify-between"
+          >
+            <div
+              class="flex items-center gap-2 text-xs text-neutral-400 font-mono"
+            >
+              <span>vault</span>
+              <span>/</span>
+              <span>lectures</span>
+              <span>/</span>
+              <span class="text-neutral-900 font-semibold"
+                >Intro-Psychology.md</span
+              >
+            </div>
+            <span
+              class="text-xs bg-neutral-100 text-neutral-600 px-2 py-0.5 rounded"
+              >Markdown Mode</span
+            >
+          </div>
+          <h1 class="text-3xl font-extrabold text-neutral-900 mb-2">
+            Introduction to Psychology 👩🏻‍🏫
+          </h1>
+          <p class="text-sm text-neutral-400 mb-6">
+            Last synced 2 minutes ago • 412 words
+          </p>
+          <div class="flex gap-2 mb-6">
+            <span
+              class="text-xs px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-md font-medium"
+              >#studies</span
+            >
+            <span
+              class="text-xs px-2.5 py-1 bg-amber-50 text-amber-700 rounded-md font-medium"
+              >#university</span
+            >
+          </div>
+          <article
+            class="prose prose-neutral text-sm leading-relaxed space-y-4 text-neutral-700"
+          >
+            <p class="font-medium text-base text-neutral-800">
+              ### Week 1, lecture notes
+            </p>
+            <p>
+              <strong>What is Psychology?</strong><br />
+              Psychology is the scientific study of behavior and mental
+              processes, divided into several distinct 'schools of thought':
+            </p>
+            <ul class="list-disc pl-5 space-y-1">
+              <li>
+                <strong>Structuralism:</strong> Focus on introspection and
+                consciousness elements (Wilhelm Wundt).
+              </li>
+              <li>
+                <strong>Functionalism:</strong> How organisms adapt, survive,
+                and flourish (William James).
+              </li>
+              <li>
+                <strong>Behaviorism:</strong> Objective observables rather than
+                inner state (John B. Watson, B.F. Skinner).
+              </li>
+            </ul>
+            <p class="pt-2">
+              Related connections: See
+              <span
+                class="text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded cursor-pointer hover:underline"
+                >[[Autumn is coming]]</span
+              >
+              regarding stress responses and cognitive load.
+            </p>
+          </article>
+        </section>
+      </div>
+      <!-- END: CenterWorkspaceArea -->
+      <!-- BEGIN: RightSidebarAiAssistant -->
+      <aside
+        class="w-80 border-l border-neutral-200/90 bg-[#FAF9F8] flex flex-col justify-between shrink-0 transition-all duration-300"
+        data-purpose="ai-copilot-panel"
+        id="ai-chat-drawer"
+      >
+        <!-- Panel Header -->
+        <div
+          class="h-16 px-4 border-b border-neutral-200 flex items-center justify-between"
+        >
+          <div class="flex items-center gap-2">
+            <div
+              class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"
+            ></div>
+            <span class="text-xs font-semibold text-neutral-900"
+              >Journal AI Assistant</span
+            >
+            <span
+              class="text-[10px] bg-neutral-200 text-neutral-700 font-medium px-1.5 py-0.5 rounded"
+              >Local</span
+            >
+          </div>
+          <button
+            class="text-neutral-400 hover:text-neutral-600 text-xs p-1"
+            onclick="toggleAiDrawer()"
+          >
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+        <!-- Chat History Stream -->
+        <div
+          class="flex-1 p-4 overflow-y-auto space-y-4 text-xs"
+          data-purpose="chat-messages"
+        >
+          <!-- AI Greeting -->
+          <div class="flex items-start gap-2.5">
+            <div
+              class="w-6 h-6 rounded-full bg-rose-500 text-white flex items-center justify-center text-[10px] shrink-0 font-bold"
+            >
+              AI
+            </div>
+            <div
+              class="bg-white p-3 rounded-2xl rounded-tl-sm border border-neutral-200/70 shadow-2xs leading-relaxed text-neutral-700"
+            >
+              Hello Anastasia! I've indexed your 4 active journals. How can I
+              help synthesize your reflections today?
+            </div>
+          </div>
+          <!-- User Prompt -->
+          <div class="flex items-start justify-end gap-2">
+            <div
+              class="bg-neutral-900 text-white p-3 rounded-2xl rounded-tr-sm max-w-[85%] leading-relaxed"
+            >
+              Why am I feeling so overwhelmed today?
+            </div>
+          </div>
+          <!-- AI Deep Answer with Citations -->
+          <div class="flex items-start gap-2.5">
+            <div
+              class="w-6 h-6 rounded-full bg-rose-500 text-white flex items-center justify-center text-[10px] shrink-0 font-bold"
+            >
+              AI
+            </div>
+            <div
+              class="bg-white p-3 rounded-2xl rounded-tl-sm border border-neutral-200/70 shadow-2xs leading-relaxed text-neutral-700 space-y-2"
+            >
+              <p>
+                Looking at your recent entries, your note
+                <button
+                  class="font-medium text-rose-600 bg-rose-50 px-1 py-0.5 rounded hover:underline inline"
+                >
+                  Autumn is coming
+                </button>
+                mentions acute mental fatigue alongside upcoming university
+                commitments.
+              </p>
+              <p>
+                Also, cross-referencing your
+                <button
+                  class="font-medium text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded hover:underline inline"
+                >
+                  Psychology
+                </button>
+                notes on cognitive overload, taking a warm meal might help:
+              </p>
+              <div
+                class="p-2 rounded-xl bg-neutral-50 border border-neutral-200/60 flex items-center gap-2"
+              >
+                <span class="text-sm">🍲</span>
+                <span class="text-[11px] font-medium text-neutral-800"
+                  >Thai Chicken recipe is ready</span
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Chat Input Field Area -->
+        <div class="p-3 border-t border-neutral-200 bg-white">
+          <form class="relative" onsubmit="handleSendChat(event)">
+            <textarea
+              class="w-full text-xs rounded-xl bg-neutral-100 border-none p-2.5 pr-8 resize-none focus:ring-2 focus:ring-neutral-300 placeholder-neutral-400 text-neutral-800"
+              placeholder="Ask about your notes, trends, or reflections..."
+              rows="2"
+            ></textarea>
+            <button
+              class="absolute right-2 bottom-2.5 text-neutral-600 hover:text-neutral-900 text-xs"
+              type="submit"
+            >
+              <i
+                class="fa-solid fa-arrow-up-long bg-neutral-200 hover:bg-neutral-300 p-1.5 rounded-full w-5 h-5 flex items-center justify-center"
+              ></i>
+            </button>
+          </form>
+          <p class="text-[10px] text-center text-neutral-400 mt-1.5">
+            Offline neural indexing active
+          </p>
+        </div>
+      </aside>
+      <!-- END: RightSidebarAiAssistant -->
+    </main>
+    <!-- END: MacOSAppWindow -->
+    <!-- JavaScript: UI State Interactivity -->
+    <script data-purpose="app-interactivity">
+      // Toggle view between Note Card Grid and Obsidian Markdown Mode
+      function switchView(viewName) {
+        const gridContainer = document.getElementById("grid-view-container");
+        const editorContainer = document.getElementById(
+          "editor-view-container",
+        );
+        const btnGrid = document.getElementById("btn-grid-view");
+        const btnList = document.getElementById("btn-list-view");
+
+        if (viewName === "markdown") {
+          gridContainer.classList.add("hidden");
+          editorContainer.classList.remove("hidden");
+
+          btnList.classList.add("bg-white", "shadow-xs", "text-neutral-800");
+          btnList.classList.remove("text-neutral-500");
+          btnGrid.classList.remove("bg-white", "shadow-xs", "text-neutral-800");
+          btnGrid.classList.add("text-neutral-500");
+        } else {
+          editorContainer.classList.add("hidden");
+          gridContainer.classList.remove("hidden");
+
+          btnGrid.classList.add("bg-white", "shadow-xs", "text-neutral-800");
+          btnGrid.classList.remove("text-neutral-500");
+          btnList.classList.remove("bg-white", "shadow-xs", "text-neutral-800");
+          btnList.classList.add("text-neutral-500");
+        }
+      }
+
+      // Toggle Collapsible AI Drawer
+      function toggleAiDrawer() {
+        const aiDrawer = document.getElementById("ai-chat-drawer");
+        if (aiDrawer.classList.contains("hidden")) {
+          aiDrawer.classList.remove("hidden");
+        } else {
+          aiDrawer.classList.add("hidden");
+        }
+      }
+
+      // Prevent submit default for mockup chat
+      function handleSendChat(e) {
+        e.preventDefault();
+        const textarea = e.target.querySelector("textarea");
+        if (textarea.value.trim() !== "") {
+          textarea.value = "";
+        }
+      }
+    </script>
+  </body>
+</html>
