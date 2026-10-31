@@ -2,6 +2,12 @@
 
 Newest first. Updated as work happens, so this always says where the project is.
 
+## Build fix (2026-10-31)
+
+`tauri dev` failed to compile: when a `[dev-dependencies]` section was added for the Rust tests, it was inserted in the middle of `[dependencies]`, turning `tracing`, `tracing-subscriber`, `keyring` and `uuid` into test-only dependencies. `cargo test` still passed (test builds include dev-dependencies), which hid the problem; a normal build did not. Fixed in `src-tauri/Cargo.toml`, verified with `cargo build`, `cargo test` and a real `tauri dev` launch. Lesson: verify with `cargo build`, not only `cargo test`.
+
+Also: opening `localhost:1420` in a normal browser now shows "Open Journaly in its app window" instead of failing on every action ("Cannot read properties of undefined (reading 'invoke')"), since the UI can only reach Rust inside the Tauri window.
+
 ## Redesign, dark mode, autosave (2026-10-31)
 
 **Redesign** (from `mock-frontend.html`): rebuilt the frontend as sidebar + header (breadcrumb, pill search with Keyword/AI toggle, New, AI Copilot) + content + collapsible AI drawer. New components: `EntryGrid` (pastel cards, colour by month, excerpts), `EntryView` (centred editor), `AiPanel` (Chat + Inspector tabs; chat stays mounted), `Icon` (inline SVG; the CSP blocks icon CDNs). `styles.css` rewritten around light/dark design tokens; CodeMirror themed from the same tokens. Header collapses to icon buttons when narrow; the AI drawer opens by default only on windows ≥1200 px; default window size raised to 1320×840 (min 900×600). Rust `EntrySummary` gained an `excerpt` (derived preview, never written to disk; unit-tested). Placeholder sections from the mock (Favorites, Tags, Notebooks, profile) were not copied, since the app has nothing behind them.
