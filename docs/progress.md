@@ -2,6 +2,58 @@
 
 Newest first. Updated as work happens, so this always says where the project is.
 
+## Chat memory (2026-10-31)
+
+Follow-up questions now work: the AI sees the earlier messages of the conversation, including chats reopened from History.
+
+- **Two halves.** (1) *Prompt*: the last turns go between the system instructions and the new question, so the model knows what "it"/"that" refers to. (2) *Retrieval*: a follow-up like "by how much?" has no useful search words, so the journal is searched for the previous question plus the new one. Only the user's words feed the search, never the model's.
+- **Bounds** (`context.py`): at most 6 earlier messages, 2,000 characters each, 6,000 in total (newest kept first); the history always starts with a user message. Old answers have their citation ids removed, since those referred to an earlier retrieval; citations are still only accepted from this question's retrieved entries.
+- **Safety**: history is validated twice: Rust accepts only `{role, content}` strings, Python keeps only `user`/`assistant` roles (a smuggled `system` message is dropped).
+- Code: `ai_daemon/retrieval/context.py` (`recent_history`, `retrieval_query`, `build_messages`), `service.py::chat(history=…)`, `commands.rs::ChatTurn`, `Chat.tsx::historyFor`.
+- Checked: Python 64 (4 new: follow-up retrieval + message order, malformed history, budget, retrieval query), Rust 15, frontend 38; browser with a recording backend: the follow-up carried the earlier Q&A, and a chat reopened from History sent all four earlier messages.
+- Mistake caught: writing the new tests replaced an existing `test_context.py` (9 tests). Noticed because the suite dropped from 60 to 55; restored from git and appended. Lesson: check whether a file exists before writing it, and treat a falling test count as a failure.
+- Note: the first Rust test run after each rebuild can take 1–5 minutes (macOS checking the new unsigned test binary); later runs take under a second.
+
+## Chat history (2026-10-31)
+
+Chats are now saved and can be reopened. Each conversation is a Markdown file in `Chats/YYYY/MM/<first question>.md`, next to `Journal/` (deliberately not inside it, so chats are never indexed and fed back to the AI as if they were journal entries). `Chats/` is in `.gitignore`.
+
+- **Format** (`frontend/src/lib/chats.ts`): frontmatter (`title`, `created_at`, `updated_at`), then each message after an invisible HTML-comment marker with its role and time. Each answer keeps the chunks it cited as a JSON comment, so citation chips still open the right entry after reopening. Readable in any Markdown editor; hand-edited or broken files still load.
+- **Saving**: after every completed answer (not errors or half-streamed text). The first answer creates the file; later ones rewrite it atomically. A failed save shows a notice but never interrupts the chat.
+- **UI**: a **History** tab in the AI panel (newest first, click to reopen, delete with a confirm click), and a **+** button for a new chat.
+- **Rust** (`src-tauri/src/chats.rs`): `list_chats`, `get_chat`, `create_chat`, `save_chat`, `delete_chat`. Path-safety code (no `..` escapes, atomic writes) moved from `journal.rs` into a shared `paths.rs::Folder` so the journal and chats use the same checks instead of two copies.
+- Checked: Rust 15 tests (3 new), frontend 38 (5 new: round-trip, comment-safety, titles, broken files); in the browser with an in-memory backend: ask → saved, follow-up → same file, New chat, History → reopen with working citations, continue → same file, delete.
+- (Memory for follow-ups was added next; see Chat memory.)
+
+## "Find models" showed nothing (2026-10-31)
+
+The lookup worked (Ollama returned its models), but results were offered through an HTML `<datalist>`, which the macOS web view rarely shows and which hides options that don't match the text already in the box (e.g. `text-embedding-3-small`). Found models are now shown as buttons under the Model field; clicking one fills it in. Checked in the browser with a stubbed backend returning the real Ollama list.
+
+## Search fix and code-block escape (2026-10-31)
+
+**Keyword search found nothing.** The index was empty (0 rows), so search had nothing to match. Two causes:
+1. The file watcher was given the journal path as `src-tauri/../Journal`. macOS reports changes with fully resolved paths (`…/journaly/Journal/…`), and Rust's `strip_prefix` compares path components literally, so `..` never matched and every change was dropped. Fixed by resolving (canonicalizing) the root before watching (`watcher.rs::watch_root`, with a regression test).
+2. Nothing indexed files that already existed or were edited while the app was closed. The watcher now runs a sync on startup (`rebuild_index`): new/changed files are indexed, unchanged ones skipped by content hash, and entries whose file was deleted are removed. `remove_file` also now deletes the entry's chunks (they were left behind).
+
+Search is case-insensitive: FTS5's `unicode61` tokenizer lowercases both the indexed text and the query. Now covered by a test (`chelsea`, `CHELSEA`, `ChElSeA`). Verified on the real journal: after the app restarted, both entries were indexed and `CHELSEA` matched.
+
+**Stuck in a code block.** A fence with no closing ``` runs to the end of the document, and a block on the last line had no line below it. Now (`frontend/src/lib/codeBlocks.ts`):
+- Enter on a new opening fence (```` ```python ````) adds the closing fence and puts the cursor between.
+- ↓ on the last line, or clicking below the text, closes an unfinished block if needed and moves the cursor to a new line under it.
+- The editor now fills its whole area, so clicks below short entries reach it (they used to land on an empty `div`).
+
+Checked: Python 60 passed, Rust 12 passed, frontend 33 tests + build; all three escape routes exercised in the browser.
+
+## Live preview editor (2026-10-31)
+
+The editor now works like Obsidian's Live Preview: Markdown renders in place and the raw syntax reappears only on the line(s) the cursor is on, so it can still be edited. Rendering never changes the file; your entries stay plain Markdown.
+
+- Rendered: headings (sizes per level), **bold**, *italic*, ~~strikethrough~~, `inline code`, `[links](url)` (shown as their text), bullet lists (•), numbered lists, task lists as clickable checkboxes (ticking one writes `[x]` into the file and autosaves), block quotes, fenced code blocks, horizontal rules. Light and dark themes.
+- Editing: GitHub-flavoured Markdown parsing, undo/redo (⌘Z / ⇧⌘Z; there was no undo before), Enter continues lists and tasks, Tab indents.
+- Code: `frontend/src/lib/livePreview.ts` (a CodeMirror view plugin built from the Markdown syntax tree; the decision logic is a pure function so it is unit-tested without a browser), styles in `styles.css` under "Live preview". Added `@codemirror/commands` and `@codemirror/language`.
+- Checked: 7 new unit tests (28 frontend tests total), `tsc` + `vite build`; editor mounted alone in the browser pane: rendering, cursor reveal, checkbox toggle, list continuation, undo, dark mode.
+- Not yet: links are not clickable (opening a URL needs Tauri's opener plugin), images show as Markdown text, tables are not rendered. Wikilinks/backlinks/graph are out of scope by choice. Not yet seen inside the native window.
+
 ## Build fix (2026-10-31)
 
 `tauri dev` failed to compile: when a `[dev-dependencies]` section was added for the Rust tests, it was inserted in the middle of `[dependencies]`, turning `tracing`, `tracing-subscriber`, `keyring` and `uuid` into test-only dependencies. `cargo test` still passed (test builds include dev-dependencies), which hid the problem; a normal build did not. Fixed in `src-tauri/Cargo.toml`, verified with `cargo build`, `cargo test` and a real `tauri dev` launch. Lesson: verify with `cargo build`, not only `cargo test`.

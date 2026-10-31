@@ -29,13 +29,18 @@ class JournalIndexer:
                 chunk_id = f"{entry.id}:{chunk.chunk_index}"; connection.execute("INSERT INTO chunks VALUES (?, ?, ?, ?, ?, ?)", (chunk_id, entry.id, chunk.heading_path, chunk.raw_content, chunk.chunk_index, entry.created_at)); connection.execute("INSERT INTO docs_fts(chunk_id, entry_id, heading, content) VALUES (?, ?, ?, ?)", (chunk_id, entry.id, chunk.heading_path, chunk.raw_content))
         return {"status": "indexed", "path": relative, "chunks": len(chunk_markdown(entry.content)), "embedding_status": "pending"}
     def rebuild(self) -> dict[str, int]:
-        total = indexed = failed = pending = 0
+        """Bring the index in line with the Markdown files: index new/changed files (unchanged ones are skipped by hash,
+        so this is cheap enough to run at every startup) and drop entries whose file no longer exists."""
+        total = indexed = failed = pending = 0; seen: set[str] = set()
         for path in self.root.rglob("*.md"):
-            total += 1
+            total += 1; relative = path.relative_to(self.root).as_posix(); seen.add(relative)
             try:
-                result = self.index_file(path.relative_to(self.root).as_posix()); indexed += result["status"] == "indexed"; pending += result.get("embedding_status") == "pending"
+                result = self.index_file(relative); indexed += result["status"] == "indexed"; pending += result.get("embedding_status") == "pending"
             except Exception: failed += 1
-        return {"files_scanned": total, "files_indexed": indexed, "files_failed": failed, "embeddings_pending": pending}
+        with self.database.connection() as connection:
+            stale = [row["filepath"] for row in connection.execute("SELECT filepath FROM journal_entries") if row["filepath"] not in seen]
+        for relative in stale: self.remove_file(relative)
+        return {"files_scanned": total, "files_indexed": indexed, "files_failed": failed, "files_removed": len(stale), "embeddings_pending": pending}
     def search_keyword(self, query: str) -> list[dict[str, object]]:
         with self.database.connection() as connection:
             return fts_search(connection, query)
@@ -75,6 +80,7 @@ class JournalIndexer:
                 connection.execute("DELETE FROM docs_fts WHERE entry_id = ?", (row["id"],))
                 if self.database.vector_ready(connection):
                     connection.execute("DELETE FROM docs_vec WHERE chunk_id IN (SELECT id FROM chunks WHERE entry_id = ?)", (row["id"],))
+                connection.execute("DELETE FROM chunks WHERE entry_id = ?", (row["id"],))
                 connection.execute("DELETE FROM journal_entries WHERE id = ?", (row["id"],))
         return {"status": "removed", "path": relative_path}
     def _path(self, relative_path: str) -> Path:

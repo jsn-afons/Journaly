@@ -19,6 +19,7 @@ class StubLLMProvider(StubEmbeddingProvider, LLMProvider):
         self.answer = answer
 
     async def generate(self, messages, response_schema=None):
+        self.last_messages = messages
         if self.answer is None:
             raise ProviderUnavailable("chat provider unavailable")
         return self.answer
@@ -39,6 +40,24 @@ class ChatTests(unittest.TestCase):
     def _entry_id(self) -> str:
         with self.database.connection() as connection:
             return connection.execute("SELECT id FROM journal_entries LIMIT 1").fetchone()[0]
+
+    def test_follow_up_question_uses_conversation_memory(self):
+        entry_id = self._entry_id()
+        provider = StubLLMProvider(f"About the restaurant [entry:{entry_id}].")
+        service = RetrievalService(self.database, provider, provider)
+        history = [
+            {"role": "user", "content": "What did I say about a restaurant?"},
+            {"role": "assistant", "content": f"You wanted to start one [entry:{entry_id}]."},
+        ]
+        # "Why?" alone matches nothing in the journal; the previous question makes retrieval find the entry.
+        with self.assertRaises(RetrievalUnavailable):
+            asyncio.run(service.chat("Why?"))
+        result = asyncio.run(service.chat("Why?", history=history))
+        self.assertEqual(result["citations"], [entry_id])
+        roles = [m["role"] for m in provider.last_messages]
+        self.assertEqual(roles, ["system", "user", "assistant", "user"])
+        self.assertEqual(provider.last_messages[2]["content"], "You wanted to start one .")  # old citation ids removed
+        self.assertTrue(provider.last_messages[-1]["content"].startswith("USER QUERY:\nWhy?"))
 
     def test_chat_returns_only_verified_citations(self):
         entry_id = self._entry_id()

@@ -39,7 +39,7 @@ async def dispatch(request: RpcRequest) -> dict[str, Any]:
     if request.method == "list_models": return {"models": await list_models(str(request.params["base_url"]), request.params.get("api_key") or None)}
     if request.method == "chat":
         on_delta = (lambda text: emit("chat_delta", {"request_id": request.id, "text": text})) if request.params.get("stream") else None
-        return await retrieval.chat(str(request.params["query"]), on_delta)
+        return await retrieval.chat(str(request.params["query"]), on_delta, request.params.get("history"))
     raise ValueError(f"unknown method: {request.method}")
 
 async def handle_line(line: str) -> dict[str, Any]:

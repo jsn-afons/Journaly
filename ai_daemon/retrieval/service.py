@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 
 from ai_daemon.api.base import EmbeddingProvider, LLMProvider, ProviderUnavailable
 from ai_daemon.core.database import JournalDatabase
-from ai_daemon.retrieval.context import assemble_context, build_messages, extract_valid_citations
+from ai_daemon.retrieval.context import assemble_context, build_messages, extract_valid_citations, recent_history, retrieval_query
 from ai_daemon.retrieval.fusion import reciprocal_rank_fusion
 from ai_daemon.retrieval.search import chunk_lookup, fts_search, recurrence_counts, record_retrievals, vector_search
 from ai_daemon.retrieval.temporal import TemporalWeights, rerank
@@ -107,14 +107,16 @@ class RetrievalService:
     async def search_hybrid(self, query: str) -> dict[str, object]:
         return await self._retrieve_hybrid(query)
 
-    async def chat(self, query: str, on_delta: Callable[[str], None] | None = None) -> dict[str, object]:
-        """With `on_delta`, the answer is streamed piece by piece; citations are still validated on the complete answer."""
-        diagnostics = await self._retrieve_hybrid(query)
+    async def chat(self, query: str, on_delta: Callable[[str], None] | None = None, history: object = None) -> dict[str, object]:
+        """With `on_delta`, the answer is streamed piece by piece; citations are still validated on the complete answer.
+        `history` is the earlier turns of the conversation ([{role, content}]); see context.recent_history."""
+        turns = recent_history(history)
+        diagnostics = await self._retrieve_hybrid(retrieval_query(query, turns))
         top_chunks = diagnostics["final_results"]
         if not top_chunks:
             raise RetrievalUnavailable("NO_CONTEXT_AVAILABLE", "No journal content is indexed yet for this query")
         context_xml, known_entry_ids = assemble_context(top_chunks)
-        messages = build_messages(query, context_xml)
+        messages = build_messages(query, context_xml, turns)
         started = time.monotonic()
         try:
             if on_delta is None:

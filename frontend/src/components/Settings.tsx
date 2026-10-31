@@ -81,12 +81,15 @@ export function Settings({ onSaved }: Props) {
       <label>Server URL<input value={urlOf(role)} onChange={(e) => setUrl(role, e.target.value)} placeholder="http://localhost:11434/v1" /></label>
       <label>Model
         <span className="row">
-          <input list={`models-${role}`} value={modelOf(role)} onChange={(e) => setModel(role, e.target.value)} placeholder="model name" />
+          <input value={modelOf(role)} onChange={(e) => setModel(role, e.target.value)} placeholder="model name" />
           <button type="button" onClick={() => void refreshModels(role)}>Find models</button>
         </span>
-        <datalist id={`models-${role}`}>{models[role].map((m) => <option key={m} value={m} />)}</datalist>
         {modelNote[role] && <small>{modelNote[role]}</small>}
       </label>
+      {/* Visible buttons, not a <datalist>: the macOS web view rarely shows datalist popups, and they hide every option that doesn't match the text already typed. */}
+      {models[role].length > 0 && <div className="model-choices" role="group" aria-label={`Available ${role} models`}>
+        {models[role].map((m) => <button type="button" key={m} className={m === modelOf(role) ? "on" : ""} aria-pressed={m === modelOf(role)} onClick={() => setModel(role, m)}>{m}</button>)}
+      </div>}
       <label>API key {preset.needsKey ? "" : "(optional)"}
         {hasSavedKey(role) && !keys[role].typed
           ? <span className="row"><span className="saved-key">Saved in macOS Keychain</span><button type="button" onClick={() => setKey(role, { clear: true })}>Remove</button></span>

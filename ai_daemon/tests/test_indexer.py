@@ -25,6 +25,18 @@ class IndexerTests(unittest.TestCase):
         path = self.root / "2026/08/Ideas.md"; path.write_text("A journal thought")
         self.indexer.index_file("2026/08/Ideas.md"); path.unlink(); self.indexer.index_file("2026/08/Ideas.md")
         self.assertEqual(self.indexer.search_keyword("thought"), [])
+    def test_keyword_search_ignores_case(self):
+        (self.root / "2026/08/Match.md").write_text("Today Chelsea beat United 2-0. We kicked their ass")
+        self.indexer.rebuild()
+        for query in ("chelsea", "CHELSEA", "ChElSeA", "chelsea UNITED", "Kicked"):
+            self.assertEqual(len(self.indexer.search_keyword(query)), 1, query)
+    def test_rebuild_drops_files_deleted_while_app_was_closed(self):
+        path = self.root / "2026/08/Gone.md"; path.write_text("A forgotten thought")
+        self.indexer.rebuild(); path.unlink()
+        summary = self.indexer.rebuild()
+        self.assertEqual(summary["files_removed"], 1); self.assertEqual(self.indexer.search_keyword("forgotten"), [])
+        with self.indexer.database.connection() as connection:
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM chunks").fetchone()[0], 0)
     def test_retry_embeddings_without_vector_extension_is_unavailable_and_does_not_crash(self):
         path = self.root / "2026/08/Ideas.md"; path.write_text("A journal thought")
         self.indexer.index_file("2026/08/Ideas.md")

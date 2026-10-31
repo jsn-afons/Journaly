@@ -15,3 +15,5 @@ journaly.config.json
 
 # Personal journal entries: private data, never committed
 Journal/
+# Saved AI chats: private, like the journal
+Chats/
