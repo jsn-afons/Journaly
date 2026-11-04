@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import type { JournalEntry } from "../lib/rpc";
 import { dayLabel, wordCount } from "../lib/entries";
 import { Editor } from "./Editor";
@@ -7,6 +8,7 @@ export type SaveState = { kind: "saved"; at: Date | null } | { kind: "pending" }
 
 interface Props {
   entry: JournalEntry; save: SaveState;
+  titleFocus: number; // bumped to move the cursor to the title
   onTitle(title: string): void; onTitleCommit(): void; onContent(content: string): void; onDelete(): void;
   onKeepMine(): void; onUseDisk(): void; onRetry(): void;
 }
@@ -24,14 +26,22 @@ function label(save: SaveState): string {
 }
 
 /** Focused, centred writing view. Changes save automatically; the status pill shows where things stand. */
-export function EntryView({ entry, save, onTitle, onTitleCommit, onContent, onDelete, onKeepMine, onUseDisk, onRetry }: Props) {
+export function EntryView({ entry, save, titleFocus, onTitle, onTitleCommit, onContent, onDelete, onKeepMine, onUseDisk, onRetry }: Props) {
   const crumbs = ["journal", ...entry.path.split("/")];
+  const title = useRef<HTMLInputElement>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  useEffect(() => { if (titleFocus) { title.current?.focus(); title.current?.select(); } }, [titleFocus]);
+  useEffect(() => setConfirmingDelete(false), [entry.path]);
   return <section className="entry-view">
     <div className="entry-meta-bar">
       <div className="crumbs mono">{crumbs.map((part, i) => <span key={i} className={i === crumbs.length - 1 ? "current" : ""}>{part}</span>)}</div>
       <div className="entry-actions">
         <span className={`save-status ${save.kind}`} role="status" title={save.kind === "error" ? save.message : "Changes save automatically (⌘S saves now)"}>{label(save)}</span>
-        <button className="ghost" onClick={onDelete} aria-label="Delete entry" title="Delete entry"><Icon name="trash" /></button>
+        {/* Inline, not window.confirm: the macOS web view has no confirm dialog (it returns false at once). "Keep" sits
+            where the trash icon was, so a double click can't delete by accident. */}
+        {confirmingDelete
+          ? <span className="delete-confirm" role="group" aria-label="Delete this entry?"><button className="danger-text" onClick={onDelete}>Delete</button><button onClick={() => setConfirmingDelete(false)}>Keep</button></span>
+          : <button className="ghost" onClick={() => setConfirmingDelete(true)} aria-label="Delete entry" title="Delete entry"><Icon name="trash" /></button>}
       </div>
     </div>
     {save.kind === "conflict" && <div className="conflict-banner" role="alert">
@@ -42,7 +52,7 @@ export function EntryView({ entry, save, onTitle, onTitleCommit, onContent, onDe
       <p><strong>Couldn’t save.</strong> {save.message} Your text is still here; autosave is paused.</p>
       <div><button className="primary small" onClick={onRetry}>Try again</button></div>
     </div>}
-    <input className="entry-title" value={entry.title} aria-label="Entry title" onChange={(e) => onTitle(e.target.value)}
+    <input ref={title} className="entry-title" value={entry.title} aria-label="Entry title" onChange={(e) => onTitle(e.target.value)}
       onBlur={onTitleCommit} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }} />
     <p className="entry-sub">{dayLabel(entry.created_at)} · {wordCount(entry.content)} words</p>
     <Editor value={entry.content} onChange={onContent} />

@@ -11,6 +11,7 @@ import type { SettingsView } from "./types/settings";
 import { asFailure, describeFailure } from "./lib/errors";
 import { Autosaver } from "./lib/autosave";
 import { applyTheme, loadTheme, type Theme } from "./lib/theme";
+import { isBlankEntry } from "./lib/entries";
 import { getHealth, journalRpc, settingsRpc, type EntrySummary, type JournalEntry } from "./lib/rpc";
 
 type Status = { kind: "loading" | "ready" | "error"; text: string };
@@ -37,6 +38,8 @@ export function App() {
   const entryRef = useRef<JournalEntry | null>(null);
   const persisted = useRef("");          // content as last read from / written to disk
   const persistedTitle = useRef("");
+  const busy = useRef(false);            // a create or delete is running; extra clicks are ignored
+  const [titleFocus, setTitleFocus] = useState(0);
 
   useEffect(() => applyTheme(theme), [theme]);
   const showEntry = (next: JournalEntry | null) => { entryRef.current = next; setEntry(next); };
@@ -80,12 +83,29 @@ export function App() {
     persisted.current = loaded.content; persistedTitle.current = loaded.title;
     saver.current!.discard(); showEntry(loaded); setSave({ kind: "saved", at: null }); setView("editor");
   };
-  const create = async () => { await leaveEntry(); const created = await journalRpc.create("Untitled", "# Untitled\n\n"); await refreshEntries(); await open(created.path); };
+  /** Already on a blank new entry? Go to its title rather than piling up identical files; either way the title gets
+   *  focus and is selected, which is the visible sign that New entry worked (a new blank page looks like the last one). */
+  const create = async () => {
+    if (busy.current) return; busy.current = true;
+    try {
+      const current = entryRef.current;
+      if (!(view === "editor" && current && isBlankEntry(current.title, current.content))) {
+        await leaveEntry();
+        const created = await journalRpc.create("Untitled", "# Untitled\n\n");
+        await refreshEntries(); await open(created.path);
+      }
+      setTitleFocus((n) => n + 1);
+    } catch (error) { setStatus({ kind: "error", text: `Couldn’t create an entry: ${describeFailure(error)}` }); }
+    finally { busy.current = false; }
+  };
   const remove = async () => {
     const current = entryRef.current;
-    if (!current || !window.confirm(`Delete “${current.title}”? The Markdown file will be removed.`)) return;
-    saver.current!.discard();
-    await journalRpc.remove(current.path); showEntry(null); setSave({ kind: "saved", at: null }); setView("grid"); await refreshEntries();
+    if (!current || busy.current) return; busy.current = true;
+    try {
+      saver.current!.discard();
+      await journalRpc.remove(current.path); showEntry(null); setSave({ kind: "saved", at: null }); setView("grid"); await refreshEntries();
+    } catch (error) { setSave({ kind: "error", message: `Couldn’t delete this entry: ${describeFailure(error)}` }); }
+    finally { busy.current = false; }
   };
   const edit = (content: string) => {
     const current = entryRef.current; if (!current || content === current.content) return;
@@ -144,7 +164,7 @@ export function App() {
       </header>
       <div className="workspace-body">
         {view === "settings" ? <Settings onSaved={setProvider} />
-          : view === "editor" && entry ? <EntryView entry={entry} save={save} onTitle={retitle} onTitleCommit={() => void commitTitle()} onContent={edit} onDelete={() => void remove()} onKeepMine={() => void keepMine()} onUseDisk={() => void useDisk()} onRetry={retrySave} />
+          : view === "editor" && entry ? <EntryView entry={entry} save={save} titleFocus={titleFocus} onTitle={retitle} onTitleCommit={() => void commitTitle()} onContent={edit} onDelete={() => void remove()} onKeepMine={() => void keepMine()} onUseDisk={() => void useDisk()} onRetry={retrySave} />
           : <EntryGrid entries={entries} search={search} onOpen={(path) => void open(path)} onCreate={() => void create()} />}
       </div>
     </section>

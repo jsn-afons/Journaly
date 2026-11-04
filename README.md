@@ -86,7 +86,7 @@ Last checked 2026-10-31. "Verified" means covered by automated tests and/or exer
 
 ## Test status
 
-Python: 65 passed on the extension-capable runtime / 54 passed + 4 skipped on the fallback runtime (the skips need the vector extension). Rust: 15 passed (+1 opt-in real-Keychain test). Frontend: `tsc` clean, 38 tests, `vite build` succeeds.
+Python: 65 passed on the extension-capable runtime / 54 passed + 4 skipped on the fallback runtime (the skips need the vector extension). Rust: 15 passed (+1 opt-in real-Keychain test). Frontend: `tsc` clean, 39 tests, `vite build` succeeds.
 
 For a dated log of what changed and why, read [docs/progress.md](docs/progress.md).
 

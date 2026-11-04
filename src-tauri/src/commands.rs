@@ -4,13 +4,15 @@ use crate::{errors::AppError, settings::{self, ProviderSettings, Role, SettingsV
 #[tauri::command]
 pub async fn health_check(state: State<'_, AppState>) -> Result<HealthResponse, AppError> { state.sidecar.health().await }
 
-#[tauri::command] pub fn list_entries(state: State<'_, AppState>) -> Result<Vec<EntrySummary>, AppError> { state.journal.list_entries() }
+// Reads run on a worker thread so a large journal or a Keychain prompt can't freeze the window. Writes stay on one
+// thread (plain `fn`): they are quick, and running them in order means two creates can't pick the same file name.
+#[tauri::command(async)] pub fn list_entries(state: State<'_, AppState>) -> Result<Vec<EntrySummary>, AppError> { state.journal.list_entries() }
 #[tauri::command] pub fn create_entry(title: String, content: String, state: State<'_, AppState>) -> Result<JournalEntry, AppError> { state.journal.create_entry(&title, &content) }
-#[tauri::command] pub fn get_entry(path: String, state: State<'_, AppState>) -> Result<JournalEntry, AppError> { state.journal.get_entry(&path) }
+#[tauri::command(async)] pub fn get_entry(path: String, state: State<'_, AppState>) -> Result<JournalEntry, AppError> { state.journal.get_entry(&path) }
 #[tauri::command] pub fn save_entry(path: String, content: String, expected_content: Option<String>, state: State<'_, AppState>) -> Result<JournalEntry, AppError> { state.journal.save_entry(&path, &content, expected_content.as_deref()) }
 #[tauri::command] pub fn rename_entry(path: String, title: String, state: State<'_, AppState>) -> Result<JournalEntry, AppError> { state.journal.rename_entry(&path, &title) }
 #[tauri::command] pub fn delete_entry(path: String, state: State<'_, AppState>) -> Result<(), AppError> { state.journal.delete_entry(&path) }
-#[tauri::command] pub fn search_journal(query: String, state: State<'_, AppState>) -> Result<Vec<EntrySummary>, AppError> { state.journal.search_files(&query) }
+#[tauri::command(async)] pub fn search_journal(query: String, state: State<'_, AppState>) -> Result<Vec<EntrySummary>, AppError> { state.journal.search_files(&query) }
 
 // AI/RAG passthroughs. Each forwards a single validated RPC to the Python daemon; React never talks to the daemon directly.
 #[tauri::command] pub async fn ai_search_keyword(query: String, state: State<'_, AppState>) -> Result<serde_json::Value, AppError> { state.sidecar.request("search_keyword", serde_json::json!({"query": query})).await }
@@ -39,7 +41,7 @@ pub struct KeyChange { pub role: Role, pub action: KeyAction, pub value: Option<
 #[serde(rename_all = "lowercase")]
 pub enum KeyAction { Set, Clear }
 
-#[tauri::command] pub fn get_provider_settings() -> SettingsView { settings::view() }
+#[tauri::command(async)] pub fn get_provider_settings() -> SettingsView { settings::view() }
 
 #[tauri::command]
 pub async fn save_provider_settings(settings: ProviderSettings, key_changes: Vec<KeyChange>, state: State<'_, AppState>) -> Result<SettingsView, AppError> {
@@ -73,8 +75,8 @@ pub async fn list_provider_models(base_url: String, role: Role, api_key: Option<
 #[tauri::command] pub fn embedding_status(state: State<'_, AppState>) -> crate::embedder::EmbedStatus { state.embedder.status() }
 
 // Saved chats (see chats.rs). The UI owns the document format; these only store files inside the Chats folder.
-#[tauri::command] pub fn list_chats(state: State<'_, AppState>) -> Result<Vec<crate::chats::ChatSummary>, AppError> { state.chats.list() }
-#[tauri::command] pub fn get_chat(path: String, state: State<'_, AppState>) -> Result<String, AppError> { state.chats.get(&path) }
+#[tauri::command(async)] pub fn list_chats(state: State<'_, AppState>) -> Result<Vec<crate::chats::ChatSummary>, AppError> { state.chats.list() }
+#[tauri::command(async)] pub fn get_chat(path: String, state: State<'_, AppState>) -> Result<String, AppError> { state.chats.get(&path) }
 #[tauri::command] pub fn create_chat(title: String, document: String, state: State<'_, AppState>) -> Result<crate::chats::ChatSummary, AppError> { state.chats.create(&title, &document) }
 #[tauri::command] pub fn save_chat(path: String, document: String, state: State<'_, AppState>) -> Result<crate::chats::ChatSummary, AppError> { state.chats.save(&path, &document) }
 #[tauri::command] pub fn delete_chat(path: String, state: State<'_, AppState>) -> Result<(), AppError> { state.chats.delete(&path) }

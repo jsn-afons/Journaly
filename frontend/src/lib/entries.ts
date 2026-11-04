@@ -9,4 +9,7 @@ export function toneFor(createdAt: string): CardTone {
 
 export const monthLabel = (createdAt: string) => new Date(createdAt).toLocaleDateString(undefined, { month: "long", year: "numeric" });
 export const dayLabel = (createdAt: string) => new Date(createdAt).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+/** A new entry nobody has written in yet: the starter heading (or nothing) and still titled Untitled. */
+export const isBlankEntry = (title: string, content: string) => /^Untitled( \d+)?$/.test(title) && /^(#\s*Untitled)?\s*$/.test(content);
+
 export const wordCount = (text: string) => (text.match(/\S+/g) ?? []).length;

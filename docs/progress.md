@@ -2,6 +2,18 @@
 
 Newest first. Updated as work happens, so this always says where the project is.
 
+## Installed app: Delete broken, New entry looked broken (2026-11-04)
+
+Reported from the .app: New entry "does nothing" then several files appear; Delete does nothing; generally slow.
+
+Measured instead of guessed, with a temporary self-test build (real production window and security policy, temp folders) clicking the real buttons:
+- **Delete never worked on macOS.** It used `window.confirm`; `wry` implements no confirm dialog, so it returned `false` in 4 ms and the handler quit silently. Unit tests and the browser checks missed it because a normal browser does have a dialog. Replaced with inline Delete/Keep ("Keep" lands where the trash icon was, so a double click is safe).
+- **New entry was working, invisibly.** File created in 8-14 ms, screen updated in 15-59 ms, unchanged with a simulated 8 s embedding server. The real files were 6-9 s apart and Ollama's log shows each succeeded. A new blank page looks the same as the last one and nothing took focus, so it read as "nothing happened". Now the title is focused and selected; a blank entry is reused rather than duplicated (`lib/entries.ts::isBlankEntry`); extra clicks during a create/delete are ignored; failures are shown instead of swallowed.
+- **Ruled out by evidence:** Keychain dialog (no log entries, 2-3 ms read), security policy, the AI service (no restarts in 8 h), Ollama load (under 1 s, requests 48-939 ms).
+- **Slowness itself was not reproduced.** The Mac has 8 GB RAM with 2.2 GB in swap, which may contribute; unproven.
+- Hardening: read commands (`list_entries`, `get_entry`, `search_journal`, `get_provider_settings`, `list_chats`, `get_chat`) moved off the main thread. Writes stay serial, so two creates can't pick the same file name.
+- Lesson: anything depending on the host window must be tested in the real window, not a browser mock.
+
 ## Installable app, new system prompt, app icon (2026-10-31)
 
 - **System prompt**: replaced with the user's psychologically informed companion prompt (`ai_daemon/retrieval/system_prompt.md`, loaded at startup). Added: app rules first (data-not-instructions, `[entry:<uuid>]` citations, timeline, conversation memory); a three-sentence target (top, style section, closing directive; safety overrides it); section 9 rewritten because the model has no tools (retrieval happens before it is called); a "Quietly Building Confidence" section (self-efficacy/mastery evidence from the journal, attribution, autonomy support, small wins, specific acknowledgment; never flattery). A test guards the parts the app depends on. ~7k tokens per request.

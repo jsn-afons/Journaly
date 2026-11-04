@@ -284,6 +284,10 @@ mark { background: var(--mark); color: var(--mark-text); border-radius: 3px; pad
 .chat-history li:hover .icon-button, .chat-history li .icon-button:focus-visible { opacity: 1; }
 .history-open { flex: 1; min-width: 0; display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 8px 10px; text-align: left; color: var(--text); }
 .history-open small { color: var(--text-3); flex-shrink: 0; font-size: 11px; }
+.delete-confirm { display: flex; gap: 4px; font-size: 12px; }
+.delete-confirm button { padding: 3px 8px; border-radius: 6px; color: var(--text-2); }
+.delete-confirm button:hover { background: var(--bg-hover); }
+.delete-confirm .danger-text { color: var(--danger); font-weight: 600; }
 .history-confirm { display: flex; gap: 6px; font-size: 11px; }
 .history-confirm button { padding: 3px 6px; border-radius: 5px; color: var(--text-2); }
 .history-confirm .danger-text { color: var(--danger); font-weight: 600; }
