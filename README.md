@@ -6,6 +6,12 @@ You write in plain Markdown. When you ask the AI something, it searches your ent
 
 Journaly is not a substitute for therapy or professional mental health care.
 
+## Screenshots
+
+![The Journaly home screen, with entries grouped by month and the AI chat panel on the right](docs/screenshots/entries.png)
+
+![AI settings, where you choose the chat and embedding providers](docs/screenshots/ai-settings.png)
+
 ## What you need
 
 - **A Mac with an M-series chip** (M1 or newer). Intel Macs aren't supported. To check, open the Apple menu → **About This Mac** and look at **Chip**.
