@@ -2,6 +2,10 @@
 
 Newest first. Updated as work happens, so this always says where the project is.
 
+## README rewritten for a brand-new Mac (2026-11-05)
+
+The README is now a guide for someone with nothing installed: requirements, install steps, AI setup (DeepSeek + Ollama, or all Ollama), data locations, troubleshooting. Status tables and test results moved to `docs/status.md`; the dev command moved to `docs/development.md`. Build steps were checked by cloning the public repo, running them, and running the result with the source folder moved away. The tool-install steps (Apple tools, Homebrew, Node, Python, Rust) were not run, since this Mac already has them.
+
 ## Installed app: Delete broken, New entry looked broken (2026-11-04)
 
 Reported from the .app: New entry "does nothing" then several files appear; Delete does nothing; generally slow.

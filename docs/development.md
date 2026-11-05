@@ -1,5 +1,11 @@
 # Development
 
+Run the app from source with hot reload (uses `Journal/` and `Chats/` in this folder, not your installed app's journal):
+
+```bash
+cd src-tauri && JOURNALY_PYTHON="$(cd .. && pwd)/ai_daemon/.runtime/arm64/bin/python" ../frontend/node_modules/.bin/tauri dev
+```
+
 Prerequisites: Node.js 20+, Rust stable with the Tauri macOS prerequisites, and Python 3.12 with `pydantic`, `httpx`, and `sqlite-vec` installed. Use a Python 3.12 interpreter for the app with `JOURNALY_PYTHON=/path/to/python3.12` when it is not the default.
 
 Install frontend dependencies with `npm --prefix frontend install`, then launch with `npm --prefix frontend run tauri`. Run daemon tests with `npm run test:python`.

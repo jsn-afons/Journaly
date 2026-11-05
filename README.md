@@ -1,105 +1,204 @@
 # Journaly
 
-A local-first macOS Markdown journal with an AI chat that answers from your own entries. Your Markdown files are the source of truth; search indexes, embeddings and AI metadata are derived and can always be rebuilt from them.
+A private journaling app for Mac with an AI you can talk to about your own life.
 
-## Install the app
+You write in plain Markdown. When you ask the AI something, it searches your entries, answers from what you actually wrote, notices how your thinking has changed over time, and links to the entries it used. Your journal stays on your Mac as ordinary files you can open with any text editor.
 
-There's no download yet: you build the app from this source code once, then use it like any Mac app. Apple Silicon Mac (M1 or newer), macOS 11 or later.
+Journaly is not a substitute for therapy or professional mental health care.
 
-**1. Install the tools** (once):
+## What you need
 
-- Xcode Command Line Tools: `xcode-select --install`
-- [Homebrew](https://brew.sh), then Node.js and Python 3.12: `brew install node python@3.12`
-- Rust: follow [rustup.rs](https://rustup.rs)
+- **A Mac with an M-series chip** (M1 or newer). Intel Macs aren't supported. To check, open the Apple menu → **About This Mac** and look at **Chip**.
+- **macOS 11 or later.**
+- **About 6 GB of free disk space** for the tools and the build. The finished app is only about 45 MB.
+- **An internet connection** for setup.
+- **For the AI features:** an AI chat model and an embedding model. See [Choose your AI](#6-choose-your-ai) for what those are. Writing and keyword search work without them.
 
-**2. Get the code and its interface dependencies:**
+## Install
+
+There's no ready-made download yet, so you build the app on your Mac once. Then it works like any other app. These steps assume a brand-new Mac with nothing installed.
+
+Open **Terminal** (press ⌘ Space, type `Terminal`, press Return). Paste each command below and press Return, waiting for each to finish before starting the next.
+
+### 1. Install Apple's developer tools
+
+```bash
+xcode-select --install
+```
+
+Click **Install** in the window that appears, and wait for it to finish before continuing. This also installs `git`.
+
+### 2. Install Homebrew
+
+[Homebrew](https://brew.sh) installs developer tools from the command line.
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+It asks for your Mac password. Nothing appears on screen as you type; that's normal. Press Return when it asks you to confirm.
+
+Then make the `brew` command available:
+
+```bash
+echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile
+```
+
+```bash
+eval "$(/opt/homebrew/bin/brew shellenv)"
+```
+
+### 3. Install Node.js and Python
+
+```bash
+brew install node python@3.12
+```
+
+### 4. Install Rust
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+```
+
+```bash
+source "$HOME/.cargo/env"
+```
+
+### 5. Download and build Journaly
 
 ```bash
 git clone https://github.com/jsn-afons/Journaly.git
-cd Journaly
-npm --prefix frontend install
 ```
 
-**3. Build the app** (takes a few minutes the first time):
+```bash
+cd Journaly
+```
+
+```bash
+npm --prefix frontend install
+```
 
 ```bash
 scripts/build_app.sh
 ```
 
-**4. Install it:** drag `src-tauri/target/release/bundle/macos/Journaly.app` into **Applications** and open it.
+The build can take 10 minutes or more the first time. It's finished when you see a line starting with `Built`.
 
-**5. Set up AI (optional):** open **AI settings** in the app and choose a provider: Ollama (free, runs on your Mac, no key) or a hosted one like OpenAI or DeepSeek (paste an API key; it's stored in the macOS Keychain). Journaling and keyword search work without any AI.
-
-Your journal is saved as Markdown in `~/Documents/Journaly/Journal`. Details, sharing a copy with a friend, and updating: [docs/packaging.md](docs/packaging.md).
-
-## What works right now
-
-Last checked 2026-10-31. "Verified" means covered by automated tests and/or exercised in the UI; see the notes column for how.
-
-### Journal (no AI needed, works offline)
-
-| Feature | Status | Notes |
-|---|---|---|
-| Create, open, edit, rename, delete entries | ✅ Working | Files live in `Journal/YYYY/MM/Title.md` with immutable `id`/`created_at` frontmatter. Rust unit tests. |
-| Safe saving | ✅ Working | Atomic writes (temp file + rename); duplicate titles get `Title 2.md`. |
-| **Autosave** | ✅ Working (new) | Saves about 1.2 s after you stop typing; ⌘S, switching entries, going back to the grid, or the window losing focus saves immediately. The title renames the file when you leave the title field (or press Enter). The status pill shows Edited / Saving… / Saved 10:42. Saver logic unit-tested; flows exercised in the browser with a simulated backend. |
-| **Conflict handling** | ✅ Working (new) | If the file was changed outside Journaly while you were editing, autosave pauses and a banner offers **Keep my version** or **Use the version on disk**. Nothing is overwritten silently. Other save errors show **Try again**. |
-| **New look + dark mode** | ✅ Working (new) | Minimal macOS-style layout from `mock-frontend.html`: sidebar, pastel entry cards (colour by month), focused editor, AI Copilot drawer. **Dark mode** toggle in the sidebar, remembered between launches; light is the default. |
-| **Live preview editor** | ✅ Working (new) | Obsidian-style: Markdown renders as you write (headings, bold/italic/strikethrough, code, links, bullets, clickable task checkboxes, quotes, code blocks, rules); the raw syntax shows only on the line you're editing. Undo/redo, list continuation on Enter; code blocks close themselves and you can always click or ↓ out of them. Files stay plain Markdown. Unit-tested and checked in the browser; not yet seen in the native window. |
-| Edits made outside the app | ✅ Working | Detected by the file watcher (1.5 s debounce) and re-indexed; files without frontmatter are adopted without losing content. On startup the index catches up with anything added, edited or deleted while the app was closed. |
-| Keyword search (Normal mode) | ✅ Working (fixed) | SQLite FTS5/BM25 with stemming, highlighted snippets, not case-sensitive. (Before 2026-10-31 nothing was being indexed, so it found nothing.) Falls back to a simple file scan if the index service is down. |
-| Index rebuilt from Markdown | ✅ Working (backend) | `rebuild_index` works and is tested, but there is **no button for it in the app yet**. |
-
-### AI
-
-| Feature | Status | Notes |
-|---|---|---|
-| Choose any AI provider in the app | ✅ Working | **AI settings** tab: Ollama, LM Studio, OpenAI, OpenRouter, or any OpenAI-compatible server, chosen separately for chat and for embeddings. **Save & test** checks both and fixes the embedding size automatically. See [docs/providers.md](docs/providers.md). |
-| API keys in the macOS Keychain | ✅ Working | Never shown again, written to files, or sent back to the UI. Keychain read/write verified with a real Keychain test; saving/removing a key through the app window not yet clicked through. |
-| Chat with your journal | ✅ Working | Hybrid retrieval → answer with clickable citations to the source entries. Explains how your views changed over time. **Remembers the conversation** (last 6 messages), so follow-ups like "by how much?" work, also in chats reopened from History. |
-| **Streaming chat** | ✅ Working (new) | The answer appears as it is generated, then is replaced by the final version with validated citation chips. Tested end to end with a mock streaming server and in the UI with a simulated stream. |
-| Citations can't be made up | ✅ Working | Only ids of entries that were actually retrieved become citations. |
-| Automatic background embedding | ✅ Working (new) | New and edited entries are embedded for meaning-based search a few seconds after saving, in small batches. If the provider is offline or misconfigured it retries with backoff (1 min doubling to 30 min) instead of hammering it; saving AI settings retries at once. The sidebar shows "up to date", "indexing N entries", or "paused — retrying in X min" with the reason. Tested with a fake AI service and mock providers; not yet run in the native app. |
-| Meaning-based search (AI mode) | ✅ Working | Needs an embedding model and the extension-capable Python runtime (see Development). Without them it falls back to keyword results and says so. |
-| AI Inspector | ✅ Working | Shows keyword, vector, fusion and time-based rankings plus timings for the last AI search/chat. |
-| **Chat history** | ✅ Working (new) | Every chat is saved as a Markdown file in `Chats/` after each answer. The **History** tab lists them; click to reopen (citations still work) and keep going, or delete. **+** starts a new chat. Checked in the browser with a simulated backend; not yet in the app window. |
-| Prompt-injection defence | ✅ Working | Journal text is passed as untrusted data with explicit instructions not to follow it. A mitigation, not a guarantee. |
-
-### Not working or not built yet
-
-| Gap | What that means for you |
-|---|---|
-| Open entry doesn't refresh from outside edits | If another app changes the entry you have open and you haven't typed since, the editor keeps showing the old text until you reopen it. If you *have* typed, the conflict banner appears instead. |
-| No side-by-side diff in a conflict | You choose a whole version (yours or the disk's); there's no line-by-line merge. |
-| Card grid has no favourites, tags or folders | The mock's placeholder sections (Favorites, Tags, Notebooks) were left out because the app has no such data yet. |
-| No "Rebuild index" button | Only possible from the backend. (Re-embedding now happens automatically.) |
-| No startup database corruption recovery | If the index database is corrupted you'd have to delete `journal_index.db` yourself; your Markdown is unaffected either way. |
-| Live preview gaps | Links aren't clickable, and images and tables show as Markdown text. (Wikilinks, backlinks and a graph view are intentionally out of scope.) |
-| No native Anthropic or Gemini provider | Use them through OpenRouter or another OpenAI-compatible gateway. |
-| Only one request at a time to the AI service | While a long chat answer is generating, background re-indexing of edited files waits until it finishes. |
-
-### What has not been checked on a real setup
-
-- A full chat with a hosted provider and a real API key (none available yet).
-- Clicking through the native app window itself: the UI (including the new design, dark mode, and autosave) has been exercised in a browser with a simulated backend. The native app has been launched and its AI service starts, but the redesign has not been seen inside it yet.
-- Live tests against local models are deliberately **not** run on this laptop (too heavy). Provider behaviour is covered by mock-server tests.
-
-## Test status
-
-Python: 65 passed on the extension-capable runtime / 54 passed + 4 skipped on the fallback runtime (the skips need the vector extension). Rust: 15 passed (+1 opt-in real-Keychain test). Frontend: `tsc` clean, 39 tests, `vite build` succeeds.
-
-For a dated log of what changed and why, read [docs/progress.md](docs/progress.md).
-
-## Development
-
-See [docs/development.md](docs/development.md). Requires Node.js, Rust stable with the Tauri prerequisites, and Python 3.12. Meaning-based search needs an extension-capable Python: point `JOURNALY_PYTHON` at `ai_daemon/.runtime/arm64/bin/python`. Without it the app runs in keyword-only mode.
-
-Start the app from the `src-tauri` folder:
+Now show the app in Finder:
 
 ```bash
-cd src-tauri && JOURNALY_PYTHON="$(cd .. && pwd)/ai_daemon/.runtime/arm64/bin/python" ../frontend/node_modules/.bin/tauri dev
+open src-tauri/target/release/bundle/macos
 ```
 
-**How it all works, and why it's built this way: [docs/system-design.md](docs/system-design.md).**
+Drag **Journaly** into your **Applications** folder and open it. You can start writing now.
 
-Other docs: [architecture](docs/architecture.md), [database](docs/database.md), [retrieval and AI](docs/rag.md), [AI providers](docs/providers.md).
+### 6. Choose your AI
+
+Journaly needs two models for its AI features:
+
+- **A chat model** writes the answers.
+- **An embedding model** lets the app find entries by meaning, so a search for "football" can find an entry about a Chelsea match.
+
+Pick one of these setups:
+
+| Setup | Chat | Embeddings | Cost | Your journal text goes to |
+|---|---|---|---|---|
+| **A. What I use** | DeepSeek | Ollama, on your Mac | Pay per use for DeepSeek | DeepSeek, for chat only |
+| **B. Everything on your Mac** | Ollama | Ollama | Free | Nowhere |
+
+Setup B keeps everything private, but chat models need much more memory than embedding models and answer more slowly, especially with 8 GB of RAM. Journaly also gives the AI long instructions, which small local models may not follow as well. Any other OpenAI-compatible provider works too, such as OpenAI.
+
+**Both setups need Ollama:**
+
+1. Download it from [ollama.com/download](https://ollama.com/download), move it to Applications, and open it. If it offers to install its command line tool, accept.
+2. Download the embedding model (about 270 MB):
+
+   ```bash
+   ollama pull nomic-embed-text
+   ```
+
+Ollama needs to be running whenever Journaly embeds new entries or searches by meaning. If it's off, Journaly tries again later.
+
+**In Journaly, open AI settings in the sidebar:**
+
+1. Under **Semantic search (embeddings)**, set **Provider** to **Ollama (local)**, click **Find models**, and pick `nomic-embed-text:latest`.
+2. Under **Chat**, set it up for your choice:
+
+   **Setup A (DeepSeek):** create an API key at [platform.deepseek.com](https://platform.deepseek.com), then enter:
+
+   | Field | Value |
+   |---|---|
+   | Provider | Custom (OpenAI-compatible) |
+   | Server URL | `https://api.deepseek.com` |
+   | API key | Your DeepSeek key |
+   | Model | Click **Find models** and pick one. I use `deepseek-flash`. |
+
+   **Setup B (Ollama):** first download a chat model (about 2 GB):
+
+   ```bash
+   ollama pull llama3.2
+   ```
+
+   Then set **Provider** to **Ollama (local)**, click **Find models**, and pick `llama3.2:latest`.
+
+3. Click **Save & test**. You should see a ✓ next to both Chat and Embeddings.
+
+API keys are stored in the macOS Keychain, never in files. macOS may ask for your Mac password so Journaly can read the key; click **Always Allow**.
+
+## Using it
+
+- **Write:** click **New entry**. Markdown formats as you type, like Obsidian's live preview, and saves automatically.
+- **Search:** type in the search bar. Switch from keyword to **AI** to search by meaning.
+- **Chat:** ask a question in the panel on the right. Answers link to the entries they came from, and past conversations are in **History**.
+
+## Where your data lives
+
+| What | Where |
+|---|---|
+| Journal entries | `~/Documents/Journaly/Journal` (plain Markdown) |
+| Saved chats | `~/Documents/Journaly/Chats` (plain Markdown) |
+| Search index and settings | `~/Library/Application Support/com.journaly.app` |
+| API keys | macOS Keychain |
+
+What leaves your Mac depends on your provider. With a hosted chat provider, your question, recent messages and the journal passages found for it are sent to that provider. With Ollama, nothing leaves.
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `command not found: brew` | Run the two commands at the end of step 2 again. |
+| `command not found: cargo` or `rustc` | Run `source "$HOME/.cargo/env"`, then try again. |
+| `xcode-select: note: Command line tools are already installed` | That's fine. Continue to the next step. |
+| Embeddings show ✗ with a connection error | Ollama isn't running. Open it and click **Save & test** again. |
+| Nothing listed under **Find models** | Check the Server URL. For Ollama, run `ollama list` to confirm the model downloaded. |
+| AI features seem stuck | Check for a Keychain password window hidden behind other windows. |
+
+## Updating
+
+Quit Journaly, then run these from the `Journaly` folder:
+
+```bash
+git pull
+```
+
+```bash
+npm --prefix frontend install
+```
+
+```bash
+scripts/build_app.sh
+```
+
+Replace the app in Applications with the new one, as in step 5. Your journal, chats and settings are stored outside the app, so they aren't affected.
+
+## Uninstalling
+
+Delete Journaly from Applications and delete the `Journaly` project folder. Your entries stay in `~/Documents/Journaly` until you delete them yourself.
+
+## Learn more
+
+- [How it works and why it's built this way](docs/system-design.md)
+- [Project status: what works and known gaps](docs/status.md)
+- [Building and sharing the app](docs/packaging.md)
+- [AI providers](docs/providers.md)
+- [Developing Journaly](docs/development.md)

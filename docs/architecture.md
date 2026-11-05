@@ -32,4 +32,4 @@ Not yet implemented: `get_entry` as a Python RPC method — citation resolution 
 
 ## What's left
 
-See the limitations in [system-design.md](system-design.md#10-known-limitations-and-what-youd-change-next) and the "Not working or not built yet" table in the README. The frontend, conflict-resolution UI, chat history and packaging described as future work in earlier versions of this page have since been built (see `docs/progress.md`). AI calls time out after 180 s per line (streamed answers keep the request alive); quick calls after 5 s.
+See the limitations in [system-design.md](system-design.md#10-known-limitations-and-what-youd-change-next) and the "Not working or not built yet" table in [status.md](status.md). The frontend, conflict-resolution UI, chat history and packaging described as future work in earlier versions of this page have since been built (see `docs/progress.md`). AI calls time out after 180 s per line (streamed answers keep the request alive); quick calls after 5 s.
